@@ -41,6 +41,7 @@ def Request(URL = None, TYPE = None, AUTH = None):
     conn = http.client.HTTPConnection("myanimelist.net")
     conn.request(TYPE, path, None, headers)
     text = conn.getresponse().read().decode('utf-8', errors='ignore')
+    conn.close()
     return text
 
 class _Anime:
@@ -59,29 +60,9 @@ class _Anime:
     self.end_date = ""
     self.synopsis = ""
     self.image = ""
-    self.duration = ""
-    self.rating = ""
-    self.japanese = ""
-    self.producers = ""
-    self.genres = ""
     for attr, val in kw.items():
       if val == None: continue
       setattr(self, attr, val)
-      
-  def getMoreInfo(self):
-    _data = Request('http://myanimelist.net/anime/%s' % (self.id), TYPE = "POST", AUTH = self.mal.auth).replace('\r','').replace('\n','')
-    try:self.duration = re.findall('<div><span class="dark_text">Duration:</span>(.*?)</div>', _data)[0][3:]
-    except:pass
-    try:self.rating = re.findall('<div class="spaceit"><span class="dark_text">Rating:</span>(.*?)</div>', _data)[0][3:]
-    except:pass
-    try:self.japanese = re.findall('<div class="spaceit_pad"><span class="dark_text">Japanese:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
-    try:self.producers = "".join(re.findall('>(.*?)<', re.findall('<div><span class="dark_text">Producers:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    try:self.genres = "".join(re.findall('>(.*?)<', re.findall('<div class="spaceit"><span class="dark_text">Genres:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    
-  moreinfo = property(getMoreInfo)
       
   def __repr__(self):
     return "<Anime.id.%s: %s>" %(self.id, self.title)
@@ -103,26 +84,9 @@ class _Manga:
     self.end_date = ""
     self.synopsis = ""
     self.image = ""
-    self.genres = ""
-    self.authors = ""
-    self.japanese = ""
-    self.serializations = ""
     for attr, val in kw.items():
       if val == None: continue
       setattr(self, attr, val)
-      
-  def getMoreInfo(self):
-    _data = Request('http://myanimelist.net/manga/%s' % (self.id), TYPE = "POST", AUTH = self.mal.auth).replace('\r','').replace('\n','')
-    try:self.genres = "".join(re.findall('>(.*?)<', re.findall('<div class="spaceit"><span class="dark_text">Genres:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    try:self.authors = "".join(re.findall('>(.*?)<', re.findall('<div><span class="dark_text">Authors:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    try:self.japanese = re.findall('<div class="spaceit_pad"><span class="dark_text">Japanese:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
-    try:self.serializations = "".join(re.findall('>(.*?)<', re.findall('<div class="spaceit"><span class="dark_text">Serialization:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    
-  moreinfo = property(getMoreInfo)
       
   def __repr__(self):
     return "<Manga.id.%s: %s>" %(self.id, self.title)
