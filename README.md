@@ -1,5 +1,4 @@
 # mal.py
-A module that is used to obtain information about the anime or manga of the site myanimelist.net
 
 This module powered by http.client, urllib.request, regex and base64
 
