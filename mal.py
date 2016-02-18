@@ -2,8 +2,6 @@
 # File: mal.py
 # Author: Agunq <agunq.e@gmail.com>
 # Version: 1.0
-# Description:
-# A module that is used to obtain information about the anime or manga of the site myanimelist.net
 ################################################################
 # Copyright 2015 Agunq
 ################################################################
