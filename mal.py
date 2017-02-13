@@ -13,10 +13,7 @@ if sys.version_info[0] < 3:
   class urllib:
     parse = __import__("urllib")
     request = __import__("urllib2")
-  class http:
-    client = __import__("httplib")
 else:
-  import http.client
   import urllib.request
   import urllib.parse
 
@@ -26,21 +23,14 @@ def Auth(user, password):
     return auth
 
 def Request(url, auth):
-    url = urllib.parse.urlparse(url)
-    path = url.path
     headers = {
     'Host':'myanimelist.net',
     'Origin':'http://myanimelist.net',
     'User-Agent':'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.22 Safari/537.36',
     'Authorization':'Basic %s' % (auth)
     }
-    conn = http.client.HTTPConnection("myanimelist.net")
-    if url.query:
-      conn.request("GET", "%s?%s" % (path, url.query), None, headers)
-    else:
-      conn.request("GET", path, None, headers)
-    text = conn.getresponse().read().decode('utf-8', errors='ignore')
-    conn.close()
+    conn = urllib.request.Request(url=url, headers=headers)
+    text = urllib.request.urlopen(conn).read().decode('utf-8', errors='ignore')
     return text
   
 class _Anime:
@@ -184,7 +174,7 @@ class MyAnimeList:
     self.entry = None
     
   def AnimeSearch(self):
-      self.data = Request('http://myanimelist.net/api/anime/search.xml?q=%s'% (self.query), self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
+      self.data = Request("https://myanimelist.net/api/anime/search.xml?q=%s" % self.query, self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
       _id = re.findall("<id>(.*?)</id>", self.data)
       _title= re.findall("<title>(.*?)</title>", self.data)
       _english = re.findall("<english>(.*?)</english>", self.data)
@@ -219,7 +209,7 @@ class MyAnimeList:
       return self.animeresults
     
   def MangaSearch(self):
-      self.data = Request('http://myanimelist.net/api/manga/search.xml?q=%s'% (self.query), self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
+      self.data = Request("https://myanimelist.net/api/manga/search.xml?q=%s" % self.query, self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
       _id = re.findall("<id>(.*?)</id>", self.data)
       _title = re.findall("<title>(.*?)</title>", self.data)
       _english = re.findall("<english>(.*?)</english>", self.data)
