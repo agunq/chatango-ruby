@@ -2,6 +2,13 @@ require_relative 'ct' #example.rb must in the same path with ct.rb
 
 $ws = Chatango.new
 
+def $ws.onConnect(room) 
+    puts "Connected to #{room.name}"
+end
+def $ws.onDisconnect(room) 
+    puts "Disconnected from #{room.name}"
+end
+
 def $ws.onMessage(room, user, message) 
     puts "#{room.name}: <#{user.name}> #{message.body}"
     if message.body == "halo" 
@@ -10,7 +17,6 @@ def $ws.onMessage(room, user, message)
     if message.body == "stop" 
         room.message "leaving.."
         $ws.finish
-
     end
     if message.body == "leave" 
         $ws.leaveRoom("monosekai")
@@ -23,4 +29,4 @@ def $ws.onMessage(room, user, message)
 end
 
 $ws.start ["nico-nico", "ws4py"] #login as anon
-#login as User $ws.start ["nico-nico", "ws4py"] "username", "password"
+#login as User $ws.start ["nico-nico", "ws4py"], "username", "password"
