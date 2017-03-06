@@ -218,7 +218,6 @@ class Room
                 ticking
             end
         end
-        @sock.close
     end
     
     def message args
@@ -228,6 +227,7 @@ class Room
     def disconnect
         @sock.close   
         @connected = false
+        onDisconnect(self)
     end
     
     def process(data)
@@ -244,6 +244,7 @@ class Room
     def rcmd_inited args
         @sock.write("g_participants:start\r\n\x00")
         @sock.write("getpremium:1\r\n\x00")
+        onConnect(self)
     end
     
     def rcmd_b args 
@@ -318,6 +319,12 @@ class Room
     def onMessage(room, user, message)
         callEvent(:onMessage, room, user, message)
     end
+    def onConnect(room)
+        callEvent(:onConnect, room)
+    end
+    def onDisconnect(room)
+        callEvent(:onDisconnect, room)
+    end
 end 
 
 class Chatango
@@ -336,9 +343,24 @@ class Chatango
         return @password
     end
     
-    def start(rooms, user=nil, password=nil)
+    def start(rooms=[], user=nil, password=nil)
         @user = user
         @password = password
+        if rooms.length == 0
+            print "Room names separated by semicolons: "
+            room = gets.chomp
+            rooms = room.split(";")
+            print "User Name: "
+            @user = gets.chomp
+            if @user == ""
+                @user = nil
+            end
+            print "Password: "
+            @password = gets.chomp
+            if @password == ""
+                @password = nil
+            end
+        end
         for r in rooms
             joinRoom(r)
         end
