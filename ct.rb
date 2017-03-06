@@ -94,29 +94,31 @@ def parseFont(f)
 end 
 
 class Task_
-    def initialize(mgr, timeout, isInterval, evt, args) 
+    def initialize(mgr, timeout, isInterval, evt, args)
         @mgr = mgr
-	    @target = Time.now.to_f + timeout
-	    @evt = evt
-	    @isInterval = isInterval
-	    @args = args
-	    @timeout = timeout
-	end
-	def mgr
-	    return @mgr end
-	def newtarget
-	    @target = Time.now.to_f + timeout
-	end
-	def target
-	    return @target end
-	def evt 
-	    return @evt end
-	def isInterval
-	    return @isInterval end
-	def args 
-	    return @args end
-	def timeout 
-	    return @timeout end
+        @target = Time.now.to_f + timeout
+        @evt = evt
+        @isInterval = isInterval
+        @args = args
+        @timeout = timeout
+    end
+    
+    def mgr
+        return @mgr end
+    
+    def newtarget
+        @target = Time.now.to_f + timeout
+    end
+    def target
+        return @target end
+    def evt 
+        return @evt end
+    def isInterval
+        return @isInterval end
+    def args 
+        return @args end
+    def timeout 
+        return @timeout end
 end
 
 
