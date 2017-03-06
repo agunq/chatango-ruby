@@ -1,5 +1,3 @@
-# mal.py
-
-This module powered by http.client, urllib.request, regex and base64
-
-Tested on Python2.7 and Python3.4
+# ct.rb
+this module is suck xaxaxaa xP better use python
+i'm making it just for fun
