@@ -17,4 +17,5 @@ def $ws.onMessage(room, user, message)
     end
 end
 
-$ws.start ["nico-nico", "ws4py"]
+$ws.start ["nico-nico", "ws4py"] #login as anon
+#login as User $ws.start ["nico-nico", "ws4py"] "username", "password"
