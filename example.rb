@@ -1,6 +1,6 @@
 require_relative 'ct' #example.rb must in the same path with ct.rb
 
-$ws = Manager.new
+$ws = Chatango.new
 
 def $ws.onMessage(room, user, message) 
     puts "#{room.name}: <#{user.name}> #{message.body}"
@@ -10,6 +10,7 @@ def $ws.onMessage(room, user, message)
     if message.body == "stop" 
         room.message "leaving.."
         $ws.finish
+
     end
     if message.body == "leave" 
         $ws.leaveRoom("monosekai")
