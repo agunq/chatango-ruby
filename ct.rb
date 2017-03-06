@@ -7,6 +7,7 @@ require 'socket'
 def getServer(group)
     
     tsweights = [['5', 75], ['6', 75], ['7', 75], ['8', 75], ['16', 75], ['17', 75], ['18', 75], ['9', 95], ['11', 95], ['12', 95], ['13', 95], ['14', 95], ['15', 95], ['19', 110], ['23', 110], ['24', 110], ['25', 110], ['26', 110], ['28', 104], ['29', 104], ['30', 104], ['31', 104], ['32', 104], ['33', 104], ['35', 101], ['36', 101], ['37', 101], ['38', 101], ['39', 101], ['40', 101], ['41', 101], ['42', 101], ['43', 101], ['44', 101], ['45', 101], ['46', 101], ['47', 101], ['48', 101], ['49', 101], ['50', 101], ['52', 110], ['53', 110], ['55', 110], ['57', 110], ['58', 110], ['59', 110], ['60', 110], ['61', 110], ['62', 110], ['63', 110], ['64', 110], ['65', 110], ['66', 110], ['68', 95], ['71', 116], ['72', 116], ['73', 116], ['74', 116], ['75', 116], ['76', 116], ['77', 116], ['78', 116], ['79', 116], ['80', 116], ['81', 116], ['82', 116], ['83', 116], ['84', 116]]
+    
     group = group.gsub("_", "q")
     group = group.gsub("-", "q")
     fnv = group[0, [5, group.length].min].to_i(base=36).to_f
@@ -56,7 +57,7 @@ def strip_html(msg)
 end
 
 def clean_message(text)
-    c = text.match("<n(.*?)\/>")
+    c = text.match("<n(.*?)\/>nico-ni")
     f = text.match("<f(.*?)>")
     if c
         c = c.captures[0]
@@ -92,6 +93,7 @@ def parseFont(f)
 end 
 
 class Task_
+    
     def initialize(mgr, timeout, isInterval, evt, args)
         @mgr = mgr
         @target = Time.now.to_f + timeout
@@ -132,6 +134,7 @@ def User(name)
 end
 
 class User_
+    
     def initialize(name)
         @name=name
     end
@@ -141,6 +144,7 @@ end
 
 
 class Message
+    
     def initialize(room, user, body, msgid)
         @user=user
         @body=body
@@ -177,17 +181,10 @@ class Room
         @connected = false
         @mgr = mgr
         @mqueue = nil
-        @tasks = []
     end
     
     def name 
         return @name 
-    end
-    def add_task task
-        @tasks << task
-    end
-    def tasks
-        return @tasks
     end
     
     def auth
@@ -208,14 +205,13 @@ class Room
         @sock = TCPSocket.new @server, 443
         auth
         @connected = true
-        setInterval(5, :ping, "Ping! at #{@name}")
+        setInterval(20, :ping, "Ping! at #{@name}")
         while @connected
             begin
-                partial_data = @sock.recv_nonblock(1024)
+                partial_data = @sock.recv(1024)
                 process(partial_data)
-                ticking
-            rescue
-                ticking
+            rescue Exception => e
+                puts e.message
             end
         end
     end
@@ -225,9 +221,11 @@ class Room
     end
     
     def disconnect
-        @sock.close   
-        @connected = false
-        onDisconnect(self)
+        if @connected == true
+            @sock.close   
+            @connected = false
+            onDisconnect(self)
+        end
     end
     
     def process(data)
@@ -280,34 +278,14 @@ class Room
         end
     end
     
-    def ticking
-        now = Time.now.to_f
-        if tasks.length > 0
-            for task in tasks
-                if task.target <= now
-                    if task.mgr.respond_to?(task.evt)
-                        task.mgr.send(task.evt, task.args)
-                        if task.isInterval
-                            new = task.timeout + now
-                            task.newtarget
-                        else
-                            tasks.delete(task)
-                            task = nil
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
     def setInterval timeout, evt, *args
         task = Task_.new(self, timeout, true, evt, *args)
-        add_task task
+        @mgr.add_task task
     end
     
     def setTimeout timeout, evt, *args
         task = Task_.new(self, timeout, false, evt, *args)
-        add_task task
+        @mgr.add_task task
     end
     
     def callEvent evt, *args
@@ -333,19 +311,27 @@ class Chatango
         @rooms = {}
         @user = nil
         @password = nil
+        @tasks = []
+        @running = false
     end
     
     def user
         return @user
     end
-    
     def password
         return @password
+    end
+    def add_task newtask
+        @tasks << newtask
+    end
+    def tasks
+        return @tasks
     end
     
     def start(rooms=[], user=nil, password=nil)
         @user = user
         @password = password
+        @running = true
         if rooms.length == 0
             print "Room names separated by semicolons: "
             room = gets.chomp
@@ -364,13 +350,39 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
+        Thread.new do
+            while @running == true
+                ticking
+            end
+        end
         @threads[rooms[0]].join
+    end
+    
+    def ticking
+        now = Time.now.to_f
+        if tasks.length > 0
+            for task in tasks
+                if task.target <= now
+                    if task.mgr.respond_to?(task.evt)
+                        task.mgr.send(task.evt, task.args)
+                        if task.isInterval
+                            new = task.timeout + now
+                            task.newtarget
+                        else
+                            @tasks.delete(task)
+                            task = nil
+                        end
+                    end
+                end
+            end
+        end
     end
     
     def finish
         for name in @rooms.keys 
             leaveRoom(name)
         end
+        @running = false
     end
     
     def joinRoom(name)
@@ -390,7 +402,6 @@ class Chatango
                 @rooms[name].disconnect
                 @rooms.delete(name)
             end
-            @threads[name].exit
             @threads.delete(name)
         end
     end
