@@ -1,249 +1,370 @@
-################################################################
-# File: mal.py
-# Author: Agunq <agunq.e@gmail.com>
-# Version: 1.0
-################################################################
-# Copyright 2015 Agunq
-################################################################
-import sys
-import re
-import base64
+#!/usr/bin/ruby
+#author agunq 
+#contact: <agunq.e@gmail.com>
+#file ct.rb
 
-if sys.version_info[0] < 3:
-  class urllib:
-    parse = __import__("urllib")
-    request = __import__("urllib2")
-else:
-  import urllib.request
-  import urllib.parse
+require 'socket'
 
-def Auth(user, password):
-  if user != None or password != None:
-    auth = base64.encodestring('{}:{}'.format(user, password).encode('utf-8')).decode('utf-8').strip()
-    return auth
-
-def Request(url, auth):
-    headers = {
-    'Host':'myanimelist.net',
-    'Origin':'http://myanimelist.net',
-    'User-Agent':'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/29.0.1547.22 Safari/537.36',
-    'Authorization':'Basic %s' % (auth)
-    }
-    conn = urllib.request.Request(url=url, headers=headers)
-    text = urllib.request.urlopen(conn).read().decode('utf-8', errors='ignore')
-    return text
-  
-class _Anime:
-  
-  def __init__(self, **kw):
-    self.mal = None
-    self.id = ""
-    self.title = ""
-    self.english = ""
-    self.synonyms = ""
-    self.episodes = ""
-    self.score = ""
-    self.type = ""
-    self.status = ""
-    self.start_date = ""
-    self.end_date = ""
-    self.synopsis = ""
-    self.image = ""
-    self.duration = ""
-    self.rating = ""
-    self.japanese = ""
-    self.producers = ""
-    self.genres = ""
-    self.ranked = ""
-    self.popularity = ""
-    self.members = ""
-    self.favorites = ""
-    for attr, val in kw.items():
-      if val == None: continue
-      setattr(self, attr, val)
-      
-  def getMoreInfo(self):
-    _data = Request('http://myanimelist.net/anime/%s' % (self.id), self.mal.auth).replace('\r','').replace('\n','')
-    try:self.duration = re.findall('<span class="dark_text">Duration:</span>(.*?)</div>', _data)[0][2:-2]
-    except:pass
-    try:self.rating = re.findall('<span class="dark_text">Rating:</span>(.*?)</div>', _data)[0][2:-2]
-    except:pass
-    try:self.japanese = re.findall('<span class="dark_text">Japanese:</span>(.*?)  </div>', _data)[0][1:]
-    except:pass
-    try:
-      _producers = re.findall('<span class="dark_text">Producers:</span>(.*?)</div>', _data)[0]
-      _producers = re.findall('<a href="(.*?)" title="(.*?)">(.*?)</a>', _producers)
-      self.producers = ", ".join([x[1] for x in _producers])
-    except:pass
-    try:
-      _genres = re.findall('<span class="dark_text">Genres:</span>(.*?)</div>', _data)[0]
-      _genres = re.findall('<a href="(.*?)" title="(.*?)">(.*?)</a>', _genres)
-      self.genres = ", ".join([x[1] for x in _genres])
-    except:pass
-    try:
-      _score = re.findall('>(.*?)<', re.findall('<span class="dark_text">Score:</span>(.*?)</div>', _data)[0])
-      self.score = "%s^%s (scored by %s users)" % (_score[0],_score[2],_score[4])
-    except:pass
-    try:
-      _ranked = re.findall('>(.*?)<', re.findall('<span class="dark_text">Ranked:(.*?)</div>', _data)[0])
-      self.ranked = "%s^%s" % (_ranked[0][2:], _ranked[1])
-    except:pass
-    try:self.popularity = re.findall('<span class="dark_text">Popularity:</span>(.*?)</div>', _data)[0][2:]
-    except:pass
-    try:self.members = re.findall('<span class="dark_text">Members:</span>(.*?)</div>', _data)[0][2:]
-    except:pass
-    try:self.favorites = re.findall('<span class="dark_text">Favorites:</span>(.*?)</div>', _data)[0][2:]
-    except:pass
-
-  moreinfo = property(getMoreInfo)
-      
-  def __repr__(self):
-    return "<Anime.id.%s: %s>" %(self.id, self.title)
-
-class _Manga:
-  
-  def __init__(self, **kw):
-    self.mal = None
-    self.id = ""
-    self.title = ""
-    self.english = ""
-    self.synonyms = ""
-    self.chapters = ""
-    self.volumes = ""
-    self.score = ""
-    self.type = ""
-    self.status = ""
-    self.start_date = ""
-    self.end_date = ""
-    self.synopsis = ""
-    self.image = ""
-    self.genres = ""
-    self.authors = ""
-    self.japanese = ""
-    self.serializations = ""
-    self.ranked = ""
-    self.popularity = ""
-    self.members = ""
-    self.favorites = ""
-    for attr, val in kw.items():
-      if val == None: continue
-      setattr(self, attr, val)
-      
-  def getMoreInfo(self):
-    _data = Request('http://myanimelist.net/manga/%s' % (self.id), self.mal.auth).replace('\r','').replace('\n','')
-    try:
-      _genres = re.findall('<a href="(.*?)" title="(.*?)">(.*?)</a>', re.findall('<span class="dark_text">Genres:</span>(.*?)</div>', _data)[0])
-      self.genres = ", ".join([x[1] for x in _genres])
-    except:pass
-    try:
-      _score = re.findall('>(.*?)<', re.findall('<span class="dark_text">Score:</span>(.*?)</div>', _data)[0])
-      self.score = "%s^%s (scored by %s users)" % (_score[0],_score[3],_score[7])
-    except:pass
-    try:
-      _authors = re.findall('<a href="(.*?)">(.*?)</a> \((.*?)\)', re.findall('<span class="dark_text">Authors:</span>(.*?)</div>', _data)[0])
-      self.authors = ", ".join(["%s (%s)" % (x[1], x[2]) for x in _authors])
-    except:pass
-    try:self.japanese = re.findall('<span class="dark_text">Japanese:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
-    try:self.serializations = "".join(re.findall('>(.*?)<', re.findall('<span class="dark_text">Serialization:</span>(.*?)</div>', _data)[0]))
-    except:pass
-    try:
-      _ranked = re.findall('>(.*?)<', re.findall('<span class="dark_text">Ranked:(.*?)</div>', _data)[0])
-      self.ranked = "%s^%s" % (_ranked[0][1:], _ranked[2])
-    except:pass
-    try:self.popularity = re.findall('<span class="dark_text">Popularity:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
-    try:self.members = re.findall('<span class="dark_text">Members:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
-    try:self.favorites = re.findall('<span class="dark_text">Favorites:</span>(.*?)</div>', _data)[0][1:]
-    except:pass
+def getServer(group)
     
-  moreinfo = property(getMoreInfo)
+    tsweights = [['5', 75], ['6', 75], ['7', 75], ['8', 75], ['16', 75], ['17', 75], ['18', 75], ['9', 95], ['11', 95], ['12', 95], ['13', 95], ['14', 95], ['15', 95], ['19', 110], ['23', 110], ['24', 110], ['25', 110], ['26', 110], ['28', 104], ['29', 104], ['30', 104], ['31', 104], ['32', 104], ['33', 104], ['35', 101], ['36', 101], ['37', 101], ['38', 101], ['39', 101], ['40', 101], ['41', 101], ['42', 101], ['43', 101], ['44', 101], ['45', 101], ['46', 101], ['47', 101], ['48', 101], ['49', 101], ['50', 101], ['52', 110], ['53', 110], ['55', 110], ['57', 110], ['58', 110], ['59', 110], ['60', 110], ['61', 110], ['62', 110], ['63', 110], ['64', 110], ['65', 110], ['66', 110], ['68', 95], ['71', 116], ['72', 116], ['73', 116], ['74', 116], ['75', 116], ['76', 116], ['77', 116], ['78', 116], ['79', 116], ['80', 116], ['81', 116], ['82', 116], ['83', 116], ['84', 116]]
+
+    group = group.gsub("_", "q")
+    group = group.gsub("-", "q")
+    fnv = group[0, [5, group.length].min].to_i(base=36).to_f
+    lnv = group[6, [3, (group.length - 5)].min]
+    
+    if lnv
+      lnv = lnv.to_i(base=36).to_f
+      lnv = [lnv, 1000].max
+    else
+      lnv = 1000
+    end
       
-  def __repr__(self):
-    return "<Manga.id.%s: %s>" %(self.id, self.title)
+    num = (fnv % lnv) / lnv
+    maxnum = tsweights.map{|x| x[1]}.inject { |sum, x| sum + x }
+    cumfreq = 0
+    sn = 0
+    for wgt in tsweights
+        
+        cumfreq += (wgt[1].to_f / maxnum)
+        if(num <= cumfreq)
+            sn = wgt[0].to_i
+            break
+        end
+    end
 
-class MyAnimeList:
-  
-  def __init__(self, query = None, auth = None):
-    self.query = urllib.parse.quote(query)
-    self.auth = Auth(auth[0], auth[1])
-    self.data = None
-    self.animeresults = list()
-    self.mangaresults = list()
-    self.entry = None
-    
-  def AnimeSearch(self):
-      self.data = Request("https://myanimelist.net/api/anime/search.xml?q=%s" % self.query, self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
-      _id = re.findall("<id>(.*?)</id>", self.data)
-      _title= re.findall("<title>(.*?)</title>", self.data)
-      _english = re.findall("<english>(.*?)</english>", self.data)
-      _synonyms = re.findall("<synonyms>(.*?)</synonyms>", self.data)
-      _episodes = re.findall("<episodes>(.*?)</episodes>", self.data)
-      _score = re.findall("<score>(.*?)</score>", self.data)
-      _type = re.findall("<type>(.*?)</type>", self.data)
-      _status = re.findall("<status>(.*?)</status>", self.data)
-      _start_date = re.findall("<start_date>(.*?)</start_date>", self.data)
-      _end_date = re.findall("<end_date>(.*?)</end_date>", self.data)
-      _synopsis = re.findall("<synopsis>(.*?)</synopsis>", self.data)
-      _image = re.findall("<image>(.*?)</image>", self.data)
-      self.entry = [pair for pair in zip(_id,_title,_english,_synonyms,_episodes,_score,_type,_status,_start_date,_end_date,_synopsis,_image)]
-      for entry in self.entry:
-        _anime = _Anime(
-          mal = self,
-          id = entry[0],
-          title = entry[1],
-          english = entry[2],
-          synonyms = entry[3],
-          episodes = entry[4],
-          score = entry[5],
-          type = entry[6],
-          status = entry[7],
-          start_date = entry[8],
-          end_date = entry[9],
-          synopsis = entry[10],
-          image = entry[11]
-          )
-        if _anime not in self.animeresults:
-          self.animeresults.append(_anime)
-      return self.animeresults
-    
-  def MangaSearch(self):
-      self.data = Request("https://myanimelist.net/api/manga/search.xml?q=%s" % self.query, self.auth).replace('\r','').replace('\n','').replace('&lt;br /&gt;','<br />').replace('&amp;','&')
-      _id = re.findall("<id>(.*?)</id>", self.data)
-      _title = re.findall("<title>(.*?)</title>", self.data)
-      _english = re.findall("<english>(.*?)</english>", self.data)
-      _synonyms = re.findall("<synonyms>(.*?)</synonyms>", self.data)
-      _chapters = re.findall("<chapters>(.*?)</chapters>", self.data)
-      _volumes = re.findall("<volumes>(.*?)</volumes>", self.data)
-      _score = re.findall("<score>(.*?)</score>", self.data)
-      _type = re.findall("<type>(.*?)</type>", self.data)
-      _status = re.findall("<status>(.*?)</status>", self.data)
-      _start_date = re.findall("<start_date>(.*?)</start_date>", self.data)
-      _end_date = re.findall("<end_date>(.*?)</end_date>", self.data)
-      _synopsis = re.findall("<synopsis>(.*?)</synopsis>", self.data)
-      _image = re.findall("<image>(.*?)</image>", self.data)
-      self.entry = [pair for pair in zip(_id,_title,_english,_synonyms,_chapters,_volumes,_score,_type,_status,_start_date,_end_date,_synopsis,_image)]
-      for entry in self.entry:
-        _manga = _Manga(
-          mal = self,
-          id = entry[0],
-          title = entry[1],
-          english = entry[2],
-          synonyms = entry[3],
-          chapters = entry[4],
-          volumes = entry[5],
-          score = entry[6],
-          type = entry[7],
-          status = entry[8],
-          start_date = entry[9],
-          end_date = entry[10],
-          synopsis = entry[11],
-          image = entry[12]
-          )
-        if _manga not in self.mangaresults:
-          self.mangaresults.append(_manga)
-      return self.mangaresults
+    return "s" + sn.to_s + ".chatango.com"
+end
 
-  anime = property(AnimeSearch)
-  manga = property(MangaSearch)
+def genUid
+    return rand(10 ** 15 .. 10 ** 16).to_s
+end
+
+def getAnonId(n, id) 
+    if n == nil
+        n = "5504"
+    end
+    j = n.split("").map{|x| x.to_i}
+    k = id[4,id.length].split("").map{|x| x.to_i}
+    l = j.zip(k)
+    m = l.map{|x| (x[0] + x[1]).to_s[-1]}
+    return m.join("")
+end
+
+def strip_html(msg)
+    msg = msg.gsub(/<\/?[^>]*>/, "")
+    return msg
+end
+
+def clean_message(text)
+    c = text.match("<n(.*?)\/>")
+    f = text.match("<f(.*?)>")
+    if c
+        c = c.captures[0]
+    end
+    if f 
+        f = f.captures[0]
+    end
+    text = text.sub("<n.*?/>", "")
+    text = text.sub("<f.*?>", "")
+    text = strip_html(text)
+    text = text.gsub("&lt;", "<")
+    text = text.gsub("&gt;", ">")
+    text = text.gsub("&quot;", "\"")
+    text = text.gsub("&apos;", "'")
+    text = text.gsub("&amp;", "&")
+    return text, c, f
+end
+
+def parseFont(f)
+    if f != nil
+        sizecolor, fontface = f.split("=", 1)
+        sizecolor = sizecolor.strip()
+        size = sizecolor[1,3].to_i
+        col = sizecolor[3,3]
+        if col == ""
+            col = nil
+        end
+        face = f.split("\"", 2)[1].split("\"", 2)[0]
+        return col, face, size
+    else
+        return nil, nil, nil
+    end
+end 
+
+class Task_
+    def initialize(mgr, timeout, isInterval, evt, args) 
+        @mgr = mgr
+	    @target = Time.now.to_f + timeout
+	    @evt = evt
+	    @isInterval = isInterval
+	    @args = args
+	    @timeout = timeout
+	end
+	def mgr
+	    return @mgr end
+	def newtarget
+	    @target = Time.now.to_f + timeout
+	end
+	def target
+	    return @target end
+	def evt 
+	    return @evt end
+	def isInterval
+	    return @isInterval end
+	def args 
+	    return @args end
+	def timeout 
+	    return @timeout end
+end
+
+
+$users = {}
+def User(name)
+    if not $users.include?(name)
+        user = User_.new name
+        $users[name] = user
+    else
+        user = $users[name]
+    end
+    return user
+end
+
+class User_
+    def initialize(name)
+        @name=name
+    end
+    def name 
+        return @name end
+end
+
+
+class Message
+    def initialize(room, user, body, msgid)
+        @user=user
+        @body=body
+        @msgid=msgid
+        @room=room
+    end
+    
+    def attach(room, msgid)
+        @msgid=msgid
+        @room=room
+    end
+    
+    def detach(room, msgid)
+        @msgid=msgid
+        @room=room
+    end
+    
+    def body 
+        return @body end
+    def msgid 
+        return @msgid end
+    def user 
+        return @user end  
+    def room 
+        return @room end
+end
+
+class Room
+    
+    def initialize(mgr, name)
+        @name=name
+        @uid=genUid
+        @server = getServer(name)
+        @connected = false
+        @mgr = mgr
+        @mqueue = nil
+        @tasks = []
+    end
+    
+    def name 
+        return @name 
+    end
+    def add_task task
+        @tasks << task
+    end
+    def tasks
+        return @tasks
+    end
+    
+    def auth
+        if @mgr.user !=nil and @mgr.password !=nil
+            @sock.write("bauth:#@name:#@uid:#{@mgr.user}:#{@mgr.password}\x00")
+        # login as anon
+        else
+            @sock.write("bauth:#@name:#@uid\x00")
+        end
+    end
+    
+    def ping h
+        puts h
+        @sock.write("\r\n\x00")
+    end
+
+	def connect
+	    @sock = TCPSocket.new @server, 443
+	    auth
+	    @connected = true
+	    setInterval(5, :ping, "Ping! at #{@name}")
+	    while @connected
+	        begin
+	            partial_data = @sock.recv_nonblock(1024)
+	            process(partial_data)
+                ticking
+            rescue
+                ticking
+            end
+	    end
+	    @sock.close
+	end
+
+	def message args
+	    @sock.write("bmsg:t12r:#{args}\r\n\x00")
+	end
+	
+	def disconnect
+	    @sock.close   
+	    @connected = false 
+	end
+	
+	def process(data)
+	    data = data.split("\x00")
+	    for d in data
+	        food = d.split(":")
+	        cmd = "rcmd_" + food[0]
+	        if self.respond_to?(cmd)
+	            self.send(cmd, food) 
+	        end
+	    end
+	end 
+	
+	def rcmd_inited args
+	    @sock.write("g_participants:start\r\n\x00")
+	    @sock.write("getpremium:1\r\n\x00")
+	end
+	
+	def rcmd_b args 
+	    name = args[2]
+	    msg = args[10, args.length].join(":")
+	    msg, n, f = clean_message(msg)
+	    if name == ""
+	        nameColor = nil
+	        name = "#" + args[3]
+	        if name == "#"
+	            name = "!anon" + getAnonId(n, args[4])
+	        end
+	    else
+	        if n
+	            nameColor = n
+	        else 
+	            nameColor = nil
+	        end
+	    end 
+	    user = User name
+	    fontColor, fontFace, fontSize = parseFont(f)
+	    msg = Message.new(self, user, msg, args[4])
+	    @mqueue  = msg
+	end
+	
+	def rcmd_u args 
+	    if @mqueue
+	        msg = @mqueue 
+	        if msg.msgid == args[1]
+	            msg.attach(self, args[2])
+	        end
+	        onMessage(self, msg.user, msg)
+	    end
+	end
+	
+	def ticking
+	    now = Time.now.to_f
+	    if tasks.length > 0
+	        for task in tasks
+	            if task.target <= now
+	                if task.mgr.respond_to?(task.evt)
+	                    task.mgr.send(task.evt, task.args)
+	                    if task.isInterval
+	                        new = task.timeout + now
+	                        task.newtarget
+	                    else
+	                        tasks.delete(task)
+	                        task = nil
+	                    end
+	                end
+	            end
+	        end
+	    end
+	end
+	
+	def setInterval timeout, evt, *args
+	    task = Task_.new(self, timeout, true, evt, *args)
+	    add_task task
+    end
+    
+    def setTimeout timeout, evt, *args
+	    task = Task_.new(self, timeout, false, evt, *args)
+	    add_task task
+    end
+	
+	def callEvent evt, *args
+	    if @mgr.respond_to?(evt)
+	        @mgr.send(evt, *args)
+	    end
+	end
+	
+	def onMessage(room, user, message)
+	    callEvent(:onMessage, room, user, message)
+	end
+end 
+
+class Manager
+    def initialize
+        @threads = {}
+        @rooms = {}
+        @user = nil
+        @password = nil
+    end
+    
+    def user
+        return @user
+    end
+    
+    def password
+        return @password
+    end
+    
+    def start(rooms, user=nil, password=nil)
+        @user = user
+        @password = password
+        for r in rooms
+            joinRoom(r)
+        end
+        @threads[rooms[0]].join
+    end
+    
+    def joinRoom(name)
+        if @threads.key?(name) == false
+            @threads[name] = Thread.new do
+                if @rooms.key?(name) == false
+                    @rooms[name] = Room.new(self, name)
+                    @rooms[name].connect
+                end
+            end
+        end
+    end
+    
+    def leaveRoom(name)
+        if @threads.key?(name) == true
+            if @rooms.key?(name) == true
+                @rooms[name].disconnect
+                @rooms.delete(name)
+            end
+            @threads[name].exit
+            @threads.delete(name)
+        end
+    end
+    
+end
