@@ -7,6 +7,10 @@ def $ws.onMessage(room, user, message)
     if message.body == "halo" 
         room.message "halo juga " + user.name
     end
+    if message.body == "stop" 
+        room.message "leaving.."
+        $ws.finish
+    end
     if message.body == "leave" 
         $ws.leaveRoom("monosekai")
         room.message "leave room monosekai"
