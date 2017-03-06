@@ -200,7 +200,7 @@ class Room
     end
     
     def ping h
-        puts h
+        #puts h
         @sock.write("\r\n\x00")
     end
 
@@ -343,6 +343,12 @@ class Manager
             joinRoom(r)
         end
         @threads[rooms[0]].join
+    end
+    
+    def finish
+        for name in @rooms.keys 
+            leaveRoom(name)
+        end
     end
     
     def joinRoom(name)
