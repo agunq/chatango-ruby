@@ -203,121 +203,121 @@ class Room
         #puts h
         @sock.write("\r\n\x00")
     end
-
-	def connect
-	    @sock = TCPSocket.new @server, 443
-	    auth
-	    @connected = true
-	    setInterval(5, :ping, "Ping! at #{@name}")
-	    while @connected
-	        begin
-	            partial_data = @sock.recv_nonblock(1024)
-	            process(partial_data)
+    
+    def connect
+        @sock = TCPSocket.new @server, 443
+        auth
+        @connected = true
+        setInterval(5, :ping, "Ping! at #{@name}")
+        while @connected
+            begin
+                partial_data = @sock.recv_nonblock(1024)
+	        process(partial_data)
                 ticking
             rescue
                 ticking
             end
-	    end
-	    @sock.close
-	end
-
-	def message args
-	    @sock.write("bmsg:t12r:#{args}\r\n\x00")
-	end
-	
-	def disconnect
-	    @sock.close   
-	    @connected = false 
-	end
-	
-	def process(data)
-	    data = data.split("\x00")
-	    for d in data
-	        food = d.split(":")
-	        cmd = "rcmd_" + food[0]
-	        if self.respond_to?(cmd)
-	            self.send(cmd, food) 
-	        end
-	    end
-	end 
-	
-	def rcmd_inited args
-	    @sock.write("g_participants:start\r\n\x00")
-	    @sock.write("getpremium:1\r\n\x00")
-	end
-	
-	def rcmd_b args 
-	    name = args[2]
-	    msg = args[10, args.length].join(":")
-	    msg, n, f = clean_message(msg)
-	    if name == ""
-	        nameColor = nil
-	        name = "#" + args[3]
-	        if name == "#"
-	            name = "!anon" + getAnonId(n, args[4])
-	        end
-	    else
-	        if n
-	            nameColor = n
-	        else 
-	            nameColor = nil
-	        end
-	    end 
-	    user = User name
-	    fontColor, fontFace, fontSize = parseFont(f)
-	    msg = Message.new(self, user, msg, args[4])
-	    @mqueue  = msg
-	end
-	
-	def rcmd_u args 
-	    if @mqueue
-	        msg = @mqueue 
-	        if msg.msgid == args[1]
-	            msg.attach(self, args[2])
-	        end
-	        onMessage(self, msg.user, msg)
-	    end
-	end
-	
-	def ticking
-	    now = Time.now.to_f
-	    if tasks.length > 0
-	        for task in tasks
-	            if task.target <= now
-	                if task.mgr.respond_to?(task.evt)
-	                    task.mgr.send(task.evt, task.args)
-	                    if task.isInterval
-	                        new = task.timeout + now
-	                        task.newtarget
-	                    else
-	                        tasks.delete(task)
-	                        task = nil
-	                    end
-	                end
-	            end
-	        end
-	    end
-	end
-	
-	def setInterval timeout, evt, *args
-	    task = Task_.new(self, timeout, true, evt, *args)
-	    add_task task
+        end
+        @sock.close
+    end
+    
+    def message args
+        @sock.write("bmsg:t12r:#{args}\r\n\x00")
+    end
+    
+    def disconnect
+        @sock.close   
+        @connected = false
+    end
+    
+    def process(data)
+        data = data.split("\x00")
+        for d in data
+            food = d.split(":")
+            cmd = "rcmd_" + food[0]
+            if self.respond_to?(cmd)
+                self.send(cmd, food) 
+            end
+        end
+    end 
+    
+    def rcmd_inited args
+        @sock.write("g_participants:start\r\n\x00")
+        @sock.write("getpremium:1\r\n\x00")
+    end
+    
+    def rcmd_b args 
+        name = args[2]
+        msg = args[10, args.length].join(":")
+        msg, n, f = clean_message(msg)
+        if name == ""
+            nameColor = nil
+            name = "#" + args[3]
+            if name == "#"
+                name = "!anon" + getAnonId(n, args[4])
+            end
+        else
+            if n
+                nameColor = n
+            else 
+                nameColor = nil
+            end
+        end 
+        user = User name
+        fontColor, fontFace, fontSize = parseFont(f)
+        msg = Message.new(self, user, msg, args[4])
+        @mqueue  = msg
+    end
+    
+    def rcmd_u args 
+        if @mqueue
+            msg = @mqueue 
+            if msg.msgid == args[1]
+                msg.attach(self, args[2])
+            end
+            onMessage(self, msg.user, msg)
+        end
+    end
+    
+    def ticking
+        now = Time.now.to_f
+        if tasks.length > 0
+            for task in tasks
+                if task.target <= now
+                    if task.mgr.respond_to?(task.evt)
+                        task.mgr.send(task.evt, task.args)
+                        if task.isInterval
+                            new = task.timeout + now
+                            task.newtarget
+                        else
+                            tasks.delete(task)
+                            task = nil
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    def setInterval timeout, evt, *args
+        task = Task_.new(self, timeout, true, evt, *args)
+        add_task task
     end
     
     def setTimeout timeout, evt, *args
-	    task = Task_.new(self, timeout, false, evt, *args)
-	    add_task task
+        task = Task_.new(self, timeout, false, evt, *args)
+        add_task task
     end
-	
-	def callEvent evt, *args
-	    if @mgr.respond_to?(evt)
-	        @mgr.send(evt, *args)
-	    end
-	end
-	
-	def onMessage(room, user, message)
-	    callEvent(:onMessage, room, user, message)
-	end
+    
+    def callEvent evt, *args
+        if @mgr.respond_to?(evt)
+            @mgr.send(evt, *args)
+        end
+    end
+    
+    def onMessage(room, user, message)
+        callEvent(:onMessage, room, user, message)
+    end
 end 
 
 class Manager
