@@ -320,7 +320,7 @@ class Room
     end
 end 
 
-class Manager
+class Chatango
     def initialize
         @threads = {}
         @rooms = {}
