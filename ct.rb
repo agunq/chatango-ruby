@@ -57,7 +57,7 @@ def strip_html(msg)
 end
 
 def clean_message(text)
-    c = text.match("<n(.*?)\/>nico-ni")
+    c = text.match("<n(.*?)\/>")
     f = text.match("<f(.*?)>")
     if c
         c = c.captures[0]
