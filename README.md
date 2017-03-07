@@ -1,4 +1,10 @@
 # ct.rb
-this module is suck xaxaxaa xP better use python
+this module is suck xaxaxaa xP 
+better use python
+
 i'm making it just for fun
-Require ruby 2.0
+
+# Require Ruby 2.0
+Try it!
+
+    ruby example.rb
