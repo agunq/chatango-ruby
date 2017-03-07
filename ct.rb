@@ -206,12 +206,15 @@ class Room
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at #{@name}")
-        while @connected
-            begin
-                partial_data = @sock.recv(1024)
-                process(partial_data)
-            rescue Exception => e
-                puts e.message
+        Thread.new do
+            while @connected
+                begin
+                    partial_data = @sock.recv(1024)
+                    process(partial_data)
+                rescue Exception => e
+                    puts e.message
+                    sleep(5)
+                end
             end
         end
     end
@@ -307,7 +310,6 @@ end
 
 class Chatango
     def initialize
-        @threads = {}
         @rooms = {}
         @user = nil
         @password = nil
@@ -350,12 +352,12 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
-        Thread.new do
+        th = Thread.new do
             while @running == true
                 ticking
             end
         end
-        @threads[rooms[0]].join
+        th.join
     end
     
     def ticking
@@ -386,23 +388,16 @@ class Chatango
     end
     
     def joinRoom(name)
-        if @threads.key?(name) == false
-            @threads[name] = Thread.new do
-                if @rooms.key?(name) == false
-                    @rooms[name] = Room.new(self, name)
-                    @rooms[name].connect
-                end
-            end
+        if @rooms.key?(name) == false
+            @rooms[name] = Room.new(self, name)
+            @rooms[name].connect
         end
     end
     
     def leaveRoom(name)
-        if @threads.key?(name) == true
-            if @rooms.key?(name) == true
-                @rooms[name].disconnect
-                @rooms.delete(name)
-            end
-            @threads.delete(name)
+        if @rooms.key?(name) == true
+            @rooms[name].disconnect
+            @rooms.delete(name)
         end
     end
     
