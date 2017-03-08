@@ -2,7 +2,10 @@
 #author agunq 
 #contact: <agunq.e@gmail.com>
 #file ct.rb
+#Require Ruby 2.0
 require 'socket'
+require 'uri'
+require 'net/http'
 
 def getServer(group)
     
@@ -172,6 +175,107 @@ class Message
         return @room end
 end
 
+class Pm
+   
+    def initialize(mgr)
+        @auid = nil
+        @server = "c1.chatango.com"
+        @connected = false
+        @mgr = mgr
+    end
+   
+    def auth
+        if @mgr.user !=nil and @mgr.password !=nil
+            uri = URI('http://chatango.com/login')
+            params = {
+                "user_id" => @mgr.user,
+                "password" => @mgr.password,
+                "storecookie" => "on",
+                "checkerrors" => "yes"
+                }
+            uri.query = URI.encode_www_form(params)
+            res = Net::HTTP.get_response(uri)
+            cookie = res['set-cookie'].match("auth\.chatango\.com ?= ?([^;]*)").captures
+            if cookie
+                @auid = cookie[0]
+            end
+            @sock.write("tlogin:#{@auid}:2\x00")
+        end
+    end
+   
+    def ping h
+        #puts h
+        @sock.write("\r\n\x00")
+    end
+   
+    def connect
+        @sock = TCPSocket.new @server, 443 #5222
+        auth
+        @connected = true
+        setInterval(20, :ping, "Ping! at <PM>")
+        Thread.new do
+            while @connected
+                begin
+                    partial_data = @sock.recv(1024)
+                    process(partial_data)
+                rescue Exception => e
+                    puts e.message
+                    sleep(5)
+                end
+            end
+        end
+    end
+   
+    def message user, msg
+        @sock.write("msg:#{user}:#{msg}\r\n\x00")
+    end
+   
+    def disconnect
+        if @connected == true
+            @sock.close  
+            @connected = false
+        end
+    end
+   
+    def process(data)
+        data = data.split("\x00")
+        for d in data
+            food = d.split(":")
+            cmd = "rcmd_" + food[0]
+            if self.respond_to?(cmd)
+                self.send(cmd, food)
+            end
+        end
+    end
+   
+    def rcmd_msg args
+        user = User args[1]
+        body = strip_html args[6, args.length].join ":"
+        body = body[0, body.length-2]
+        onPMMessage(self, user, body)
+    end
+   
+    def setInterval timeout, evt, *args
+        task = Task_.new(self, timeout, true, evt, *args)
+        @mgr.add_task task
+    end
+   
+    def setTimeout timeout, evt, *args
+        task = Task_.new(self, timeout, false, evt, *args)
+        @mgr.add_task task
+    end
+   
+    def callEvent evt, *args
+        if @mgr.respond_to?(evt)
+            @mgr.send(evt, *args)
+        end
+    end
+   
+    def onPMMessage(pm, user, message)
+        callEvent(:onPMMessage, pm, user, message)
+    end
+end 
+
 class Room
     
     def initialize(mgr, name)
@@ -315,6 +419,7 @@ class Chatango
         @password = nil
         @tasks = []
         @running = false
+        @pm = nil
     end
     
     def user
@@ -352,6 +457,8 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
+        @pm = Pm.new(self)
+        @pm.connect
         th = Thread.new do
             while @running == true
                 ticking
@@ -381,9 +488,11 @@ class Chatango
     end
     
     def finish
+        @tasks.clear
         for name in @rooms.keys 
             leaveRoom(name)
         end
+        @pm.disconnect
         @running = false
     end
     
@@ -400,5 +509,4 @@ class Chatango
             @rooms.delete(name)
         end
     end
-    
 end
