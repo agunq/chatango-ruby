@@ -183,6 +183,14 @@ class Pm
         @connected = false
         @mgr = mgr
     end
+    
+    def sock
+        return @sock 
+    end
+    
+    def connected
+        return @connected 
+    end
    
     def auth
         if @mgr.user !=nil and @mgr.password !=nil
@@ -285,10 +293,19 @@ class Room
         @connected = false
         @mgr = mgr
         @mqueue = nil
+        @sock = nil
     end
     
     def name 
         return @name 
+    end
+    
+    def sock
+        return @sock 
+    end
+    
+    def connected
+        return @connected 
     end
     
     def auth
@@ -310,17 +327,6 @@ class Room
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at #{@name}")
-        Thread.new do
-            while @connected
-                begin
-                    partial_data = @sock.recv(1024)
-                    process(partial_data)
-                rescue Exception => e
-                    puts e.message
-                    sleep(5)
-                end
-            end
-        end
     end
     
     def message args
@@ -431,8 +437,20 @@ class Chatango
     def add_task newtask
         @tasks << newtask
     end
+    def del_task task
+        if @tasks.include?(task)
+            @tasks.delete task
+        end
+    end
+    
     def tasks
-        return @tasks
+        tk = []
+        for t in @tasks
+            if t.mgr.connected == true
+                tk << t
+            end
+        end
+        return tk
     end
     
     def start(rooms=[], user=nil, password=nil)
@@ -457,11 +475,26 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
-        @pm = Pm.new(self)
-        @pm.connect
+        if @user != nil and @password != nil
+            @pm = Pm.new(self)
+            @pm.connect
+        end
         th = Thread.new do
             while @running == true
                 ticking
+                conn = @rooms.values.collect{|k| k.sock if k.connected == true}
+                w, r, e = select(conn, nil, nil, 0)
+                for room in @rooms.keys
+                    if w != nil
+                        for sock in w
+                            r = @rooms[room]
+                            if r != nil and r.sock == sock
+                                partial_data = sock.recv(1024)
+                                @rooms[room].process(partial_data)
+                            end
+                        end
+                    end
+                end
             end
         end
         th.join
@@ -492,7 +525,9 @@ class Chatango
         for name in @rooms.keys 
             leaveRoom(name)
         end
-        @pm.disconnect
+        if @pm != nil
+            @pm.disconnect
+        end
         @running = false
     end
     
