@@ -3,6 +3,7 @@
 #contact: <agunq.e@gmail.com>
 #file ct.rb
 #Require Ruby 2.0
+
 require 'socket'
 require 'uri'
 require 'net/http'
@@ -139,20 +140,36 @@ end
 class User_
     
     def initialize(name)
-        @name=name
+        @name = name
+        @nameColor = "000"
+        @fontSize = 12
+        @fontFace = "0"
+        @fontColor = "000"
     end
     def name 
         return @name end
+    def nameColor 
+        return @nameColor end
+    def fontSize 
+        return @fontSize end
+    def fontFace 
+        return @fontFace end
+    def fontColor 
+        return @fontColor end
+    def setNameColor n
+        @nameColor = n
+    end
 end
+
 
 
 class Message
     
     def initialize(room, user, body, msgid)
-        @user=user
-        @body=body
-        @msgid=msgid
-        @room=room
+        @user = user
+        @body = body
+        @msgid = msgid
+        @room = room
     end
     
     def attach(room, msgid)
@@ -193,10 +210,10 @@ class Pm
     end
    
     def auth
-        if @mgr.user !=nil and @mgr.password !=nil
+        if @mgr.username !=nil and @mgr.password !=nil
             uri = URI('http://chatango.com/login')
             params = {
-                "user_id" => @mgr.user,
+                "user_id" => @mgr.username,
                 "password" => @mgr.password,
                 "storecookie" => "on",
                 "checkerrors" => "yes"
@@ -309,8 +326,8 @@ class Room
     end
     
     def auth
-        if @mgr.user !=nil and @mgr.password !=nil
-            @sock.write("bauth:#@name:#@uid:#{@mgr.user}:#{@mgr.password}\x00")
+        if @mgr.username !=nil and @mgr.password !=nil
+            @sock.write("bauth:#@name:#@uid:#{@mgr.username}:#{@mgr.password}\x00")
         # login as anon
         else
             @sock.write("bauth:#@name:#@uid\x00")
@@ -329,8 +346,13 @@ class Room
         setInterval(20, :ping, "Ping! at #{@name}")
     end
     
-    def message args
-        @sock.write("bmsg:t12r:#{args}\r\n\x00")
+    def message msg
+        msgs = msg.chars.each_slice(2000).map(&:join)
+        s, c, f = @mgr.user.fontSize, @mgr.user.fontColor, @mgr.user.fontFace
+        for msg in msgs
+            msg = "<n#{@mgr.user.nameColor}/><f x#{s}#{c}=\"#{f}\">#{msg}</f>"
+            @sock.write("bmsg:t12r:#{msg}\r\n\x00")
+        end
     end
     
     def disconnect
@@ -356,6 +378,18 @@ class Room
         @sock.write("g_participants:start\r\n\x00")
         @sock.write("getpremium:1\r\n\x00")
         onConnect(self)
+    end
+    
+    def rcmd_ok args
+        if args[3] == "C" and @mgr.username == nil and @mgr.password == nil
+            n = args[5].split('.')[0]
+            n = n[-4, n.length]
+            aid = args[2][0, 8]
+            pid = "!anon" + getAnonId(n, aid)
+            @mgr.user.setNameColor n
+        elsif args[3] == "C" and @mgr.password == nil
+            @sock.write("blogin:#{@mgr.username}\r\n\x00")
+        end
     end
     
     def rcmd_b args 
@@ -422,6 +456,7 @@ class Chatango
     def initialize
         @rooms = {}
         @user = nil
+        @username = nil
         @password = nil
         @tasks = []
         @running = false
@@ -429,7 +464,11 @@ class Chatango
     end
     
     def user
+        @user = User username
         return @user
+    end
+    def username
+        return @username
     end
     def password
         return @password
@@ -453,8 +492,8 @@ class Chatango
         return tk
     end
     
-    def start(rooms=[], user=nil, password=nil)
-        @user = user
+    def start(rooms=[], username=nil, password=nil)
+        @username = username
         @password = password
         @running = true
         if rooms.length == 0
@@ -462,9 +501,9 @@ class Chatango
             room = gets.chomp
             rooms = room.split(";")
             print "User Name: "
-            @user = gets.chomp
-            if @user == ""
-                @user = nil
+            @username = gets.chomp
+            if @username == ""
+                @username = nil
             end
             print "Password: "
             @password = gets.chomp
@@ -475,7 +514,7 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
-        if @user != nil and @password != nil
+        if @username != nil and @password != nil
             @pm = Pm.new(self)
             @pm.connect
         end
