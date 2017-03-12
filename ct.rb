@@ -123,6 +123,9 @@ class Task_
         return @args end
     def timeout 
         return @timeout end
+    def inspect
+        return "<Task: #{target}>"
+    end
 end
 
 
@@ -171,6 +174,9 @@ class User_
     def setFontSize n
         @fontSize = n
     end
+    def inspect
+        return "<User: #{rawname}>"
+    end
     def to_s
         return "<User: #{rawname}>"
     end
@@ -204,7 +210,7 @@ class Message
         return @user end  
     def room 
         return @room end
-    def to_s
+    def inspect
         return "<Message: #{user}>"
     end
 end
@@ -308,7 +314,7 @@ class Pm
         callEvent(:onPMMessage, pm, user, message)
     end
     
-    def to_s
+    def inspect
         return "<Pm: #{@mgr.user}>"
     end
 end 
@@ -468,7 +474,7 @@ class Room
     def onDisconnect(room)
         callEvent(:onDisconnect, room)
     end
-    def to_s
+    def inspect
         return "<Room: #{name}>"
     end
 end 
@@ -613,7 +619,7 @@ class Chatango
         end
     end
     
-    def to_s
+    def inspect
         return "<Chatango: #{username}>"
     end
 end
