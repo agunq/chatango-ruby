@@ -269,7 +269,9 @@ class Pm
    
     def disconnect
         if @connected == true
-            @sock.close  
+            if @sock.closed? == false 
+                @sock.close   
+            end
             @connected = false
         end
     end
@@ -379,7 +381,9 @@ class Room
     
     def disconnect
         if @connected == true
-            @sock.close   
+            if @sock.closed? == false 
+                @sock.close   
+            end
             @connected = false
             onDisconnect(self)
         end
@@ -552,25 +556,34 @@ class Chatango
             @pm = Pm.new(self)
             @pm.connect
         end
+
         while @running == true
             ticking
-            sockets = @rooms.values.collect{|k| k.sock if k.connected == true}
-            connections = @rooms.values.collect{|k| k if k.connected == true}
+            sockets = @rooms.values.collect{|k| k.sock }
+            connections = @rooms.values.collect{|k| k}
             if @pm != nil
                 sockets << @pm.sock
                 connections << @pm
             end
+            sockets = sockets.reject{|k| k.closed?}
             w, r, e = select(sockets, nil, nil, 0)
             for c in connections
-                if w != nil
+                if c.sock.closed? == true
+                    c.disconnect
+                elsif w != nil
                     for sock in w
                         if c != nil and c.sock == sock
-                            partial_data = sock.recv(1024)
-                            c.process(partial_data)
+                            begin
+                                partial_data = sock.recv(1024)
+                                c.process(partial_data)
+                            rescue
+                                c.disconnect
+                            end
                         end
                     end
                 end
             end
+            ticking
         end
     end
     
@@ -609,6 +622,10 @@ class Chatango
         if @rooms.key?(name) == false
             @rooms[name] = Room.new(self, name)
             @rooms[name].connect
+        elsif @rooms.key?(name) == true
+            if @rooms[name].connected == false
+                @rooms[name].connect
+            end
         end
     end
     
