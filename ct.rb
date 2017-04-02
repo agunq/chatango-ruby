@@ -389,6 +389,14 @@ class Room
         end
     end
     
+    def setBgMode mode
+        @sock.write("msgbg:" + mode.to_s + "\r\n\x00")
+    end
+    
+    def setRecordingMode mode
+        @sock.write("msgmedia:" + mode.to_s + "\r\n\x00")
+    end
+    
     def process(data)
         data = data.split("\x00")
         for d in data
@@ -396,7 +404,7 @@ class Room
             if food.length > 0
                 cmd = "rcmd_" + food[0]
                 if self.respond_to?(cmd)
-                    self.send(cmd, food) 
+                    self.send(cmd, food)
                 end
             end
         end
@@ -496,9 +504,21 @@ class Chatango
     def pm
         return @pm
     end
+    
     def user
         @user = User username
         return @user
+    end
+    
+    def rooms
+        rl = []
+        ro = @rooms.values.collect{|k| k}
+        for r in ro
+            if r.connected == true
+                rl << r
+            end
+        end
+        return rl
     end
     
     def username
@@ -524,6 +544,18 @@ class Chatango
             end
         end
         return tk
+    end
+    
+    def enableBg
+        for room in rooms
+            room.setBgMode(1)
+        end
+    end
+    
+    def disableBg
+        for room in rooms
+            room.setBgMode(0)
+        end
     end
     
     def start(rooms=[], username=nil, password=nil)
@@ -556,9 +588,7 @@ class Chatango
             @pm = Pm.new(self)
             @pm.connect
         end
-
         while @running == true
-            ticking
             sockets = @rooms.values.collect{|k| k.sock }
             connections = @rooms.values.collect{|k| k}
             if @pm != nil
