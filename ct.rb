@@ -588,6 +588,9 @@ class Chatango
             @pm = Pm.new(self)
             @pm.connect
         end
+        
+        callEvent(:onInitialize)
+        
         while @running == true
             sockets = @rooms.values.collect{|k| k.sock }
             connections = @rooms.values.collect{|k| k}
@@ -663,6 +666,12 @@ class Chatango
         if @rooms.key?(name) == true
             @rooms[name].disconnect
             @rooms.delete(name)
+        end
+    end
+    
+    def callEvent evt, *args
+        if self.respond_to?(evt)
+            self.send(evt, *args)
         end
     end
     
