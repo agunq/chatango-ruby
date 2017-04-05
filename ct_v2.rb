@@ -22,8 +22,9 @@ class WebSocketC
         @pipe_broken = false
         @frame = ::WebSocket::Frame::Incoming::Client.new
         @closed = false
+
         @socket.write @handshake.to_s
-        
+
         while !@handshaked do
             begin
                 unless @recv_data = @socket.getc
@@ -53,7 +54,7 @@ class WebSocketC
         frame = ::WebSocket::Frame::Outgoing::Client.new(:data => data, :type => type, :version => @handshake.version)
         begin
             @socket.write frame.to_s
-        rescue Errno::EPIPE => e
+        rescue => e
             @pipe_broken = true
             puts "pipe broken - #{e.message}"
             close
@@ -62,7 +63,7 @@ class WebSocketC
 
     def read
         begin
-            @recv_data = @socket.getc
+            @recv_data = @socket.recv(1)
             @frame << @recv_data
             while msg = @frame.next
                 return msg.to_s.force_encoding("utf-8").encode
@@ -344,20 +345,6 @@ class Pm
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at <PM>")
-        event
-    end
-    
-    def event
-        Thread.new do
-            while @connected 
-                if @socket.open?
-                    recv_data = @socket.read
-                    process(recv_data)
-                else
-                    disconnect
-                end
-            end
-        end
     end
 
     def message user, msg
@@ -465,20 +452,6 @@ class Room
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at #{@name}")
-        event
-    end
-    
-    def event
-        Thread.new do
-            while @connected 
-                if @socket.open?
-                    recv_data = @socket.read
-                    process(recv_data)
-                else
-                    disconnect
-                end
-            end
-        end
     end
 
     def message msg, html = false
@@ -710,6 +683,26 @@ class Chatango
         callEvent(:onInitialize)
 
         while @running == true
+            sockets = @rooms.values.collect{|k| k.socket.socket }
+            connections = @rooms.values.collect{|k| k}
+            if @pm != nil
+                sockets << @pm.socket.socket
+                connections << @pm
+            end
+            sockets = sockets.reject{|k| k == nil}
+            w, r, e = select(sockets, nil, nil, 0)
+            for c in connections
+                if c.socket.open? == false
+                    c.disconnect
+                elsif w != nil
+                    for socket in w 
+                        if c != nil and c.socket.socket == socket                
+                            partial_data = c.socket.read
+                            c.process(partial_data)            
+                        end
+                    end
+                end
+            end
             ticking
         end
     end
