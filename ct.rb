@@ -97,7 +97,9 @@ def parseFont(f)
 end 
 
 class Task_
-    
+
+    attr_accessor :mgr, :target, :evt, :isInterval, :args, :timeout
+
     def initialize(mgr, timeout, isInterval, evt, args)
         @mgr = mgr
         @target = Time.now.to_f + timeout
@@ -107,22 +109,10 @@ class Task_
         @timeout = timeout
     end
     
-    def mgr
-        return @mgr end
-    
     def newtarget
         @target = Time.now.to_f + timeout
     end
-    def target
-        return @target end
-    def evt 
-        return @evt end
-    def isInterval
-        return @isInterval end
-    def args 
-        return @args end
-    def timeout 
-        return @timeout end
+ 
     def inspect
         return "<Task: #{target}>"
     end
@@ -141,7 +131,9 @@ def User(name)
 end
 
 class User_
-    
+
+    attr_accessor :name, :rawname, :nameColor, :fontSize, :fontFace, :fontColor
+
     def initialize(name)
         @name = name
         @rawname = name
@@ -150,33 +142,27 @@ class User_
         @fontFace = "0"
         @fontColor = "000"
     end
-    def name 
-        return @name end
-    def rawname 
-        return @rawname end
-    def nameColor 
-        return @nameColor end
-    def fontSize 
-        return @fontSize end
-    def fontFace 
-        return @fontFace end
-    def fontColor 
-        return @fontColor end
+    
     def setNameColor n
         @nameColor = n
     end
+
     def setFontColor n
         @fontColor = n
     end
+
     def setFontFace n
         @fontFace = n
     end
+
     def setFontSize n
         @fontSize = n
     end
+
     def inspect
         return "<User: #{rawname}>"
     end
+
     def to_s
         return "<User: #{rawname}>"
     end
@@ -185,6 +171,8 @@ end
 
 class Message
     
+    attr_accessor :user, :body, :msgid, :room
+
     def initialize(room, user, body, msgid)
         @user = user
         @body = body
@@ -202,14 +190,6 @@ class Message
         @room = room
     end
     
-    def body 
-        return @body end
-    def msgid 
-        return @msgid end
-    def user 
-        return @user end  
-    def room 
-        return @room end
     def inspect
         return "<Message: #{user}>"
     end
@@ -524,12 +504,15 @@ class Chatango
     def username
         return @username
     end
+
     def password
         return @password
     end
+
     def add_task newtask
         @tasks << newtask
     end
+
     def del_task task
         if @tasks.include?(task)
             @tasks.delete task
