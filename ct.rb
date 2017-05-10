@@ -204,8 +204,8 @@ class Pm
         @mgr = mgr
     end
     
-    def sock
-        return @sock 
+    def socket
+        return @socket
     end
     
     def connected
@@ -227,30 +227,30 @@ class Pm
             if cookie
                 @auid = cookie[0]
             end
-            @sock.write("tlogin:#{@auid}:2\x00")
+            @socket.write("tlogin:#{@auid}:2\x00")
         end
     end
    
     def ping h
         #puts h
-        @sock.write("\r\n\x00")
+        @socket.write("\r\n\x00")
     end
    
     def connect
-        @sock = TCPSocket.new @server, 443 #5222
+        @socket = TCPSocket.new @server, 443 #5222
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at <PM>")
     end
    
     def message user, msg
-        @sock.write("msg:#{user}:#{msg}\r\n\x00")
+        @socket.write("msg:#{user}:#{msg}\r\n\x00")
     end
    
     def disconnect
         if @connected == true
-            if @sock.closed? == false 
-                @sock.close   
+            if @socket.closed? == false 
+                @socket.close   
             end
             @connected = false
         end
@@ -310,15 +310,16 @@ class Room
         @connected = false
         @mgr = mgr
         @mqueue = nil
-        @sock = nil
+        @socket = nil
+        @status = {}
     end
     
     def name 
         return @name 
     end
     
-    def sock
-        return @sock 
+    def socket
+        return @socket
     end
     
     def connected
@@ -327,20 +328,20 @@ class Room
     
     def auth
         if @mgr.username !=nil and @mgr.password !=nil
-            @sock.write("bauth:#@name:#@uid:#{@mgr.username}:#{@mgr.password}\x00")
+            @socket.write("bauth:#@name:#@uid:#{@mgr.username}:#{@mgr.password}\x00")
         # login as anon
         else
-            @sock.write("bauth:#@name:#@uid\x00")
+            @socket.write("bauth:#@name:#@uid\x00")
         end
     end
     
     def ping h
         #puts h
-        @sock.write("\r\n\x00")
+        @socket.write("\r\n\x00")
     end
     
     def connect
-        @sock = TCPSocket.new @server, 443
+        @socket = TCPSocket.new @server, 443
         auth
         @connected = true
         setInterval(20, :ping, "Ping! at #{@name}")
@@ -355,26 +356,30 @@ class Room
         s, c, f = @mgr.user.fontSize, @mgr.user.fontColor, @mgr.user.fontFace
         for msg in msgs
             msg = "<n#{@mgr.user.nameColor}/><f x#{s}#{c}=\"#{f}\">#{msg}</f>"
-            @sock.write("bmsg:t12r:#{msg}\r\n\x00")
+            @socket.write("bmsg:t12r:#{msg}\r\n\x00")
         end
     end
     
     def disconnect
         if @connected == true
-            if @sock.closed? == false 
-                @sock.close   
+            if @socket.closed? == false 
+                @socket.close   
             end
             @connected = false
             onDisconnect(self)
         end
     end
+
+    def userlist
+        return @status.values
+    end
     
     def setBgMode mode
-        @sock.write("msgbg:" + mode.to_s + "\r\n\x00")
+        @socket.write("msgbg:" + mode.to_s + "\r\n\x00")
     end
     
     def setRecordingMode mode
-        @sock.write("msgmedia:" + mode.to_s + "\r\n\x00")
+        @socket.write("msgmedia:" + mode.to_s + "\r\n\x00")
     end
     
     def process(data)
@@ -398,16 +403,62 @@ class Room
             pid = "!anon" + getAnonId(n, aid)
             @mgr.user.setNameColor n
         elsif args[3] == "C" and @mgr.password == nil
-            @sock.write("blogin:#{@mgr.username}\r\n\x00")
+            @socket.write("blogin:#{@mgr.username}\r\n\x00")
         end
     end
     
     def rcmd_inited args
-        @sock.write("g_participants:start\r\n\x00")
-        @sock.write("getpremium:1\r\n\x00")
+        @socket.write("g_participants:start\r\n\x00")
+        @socket.write("getpremium:1\r\n\x00")
         onConnect(self)
     end
+
+    def rcmd_g_participants args
+        args = args[1, args.length - 1].join(":")
+        args = args.split(";")
+        for data in args
+            data = data.split(":")
+            sid = data[0]
+            puid = data[2]
+            name = data[3]
+            if name == "None"
+                n = args[1].to_i.to_s[-4, 4]
+                if data[4] == "None"
+                    name = "!anon" + getAnonId(n, puid)
+                end
+            end
+            user = User name
+            @status[sid] = user
+        end
+    end
     
+    def rcmd_participant args
+        args = args[1, args.length - 1]
+        sid = args[1]
+        puid = args[2]
+        name = args[3]
+        if name == "None"
+            n = args[6].to_i.to_s[-4, 4]
+            if args[4] == "None"
+                name = "!anon" + getAnonId(n, puid)
+            end
+        end
+
+        user = User name
+        
+        #leave
+        if args[0] == "0" 
+            if @status.has_key?(sid)
+                @status.delete(sid)
+            end
+        end
+
+        #join/rejoin
+        if args[0] == "1" or args[0] == "2"
+            @status[sid] = user
+        end
+    end
+
     def rcmd_b args 
         name = args[2]
         msg = args[10, args.length].join(":")
@@ -575,22 +626,22 @@ class Chatango
         callEvent(:onInitialize)
         
         while @running == true
-            sockets = @rooms.values.collect{|k| k.sock }
+            sockets = @rooms.values.collect{|k| k.socket}
             connections = @rooms.values.collect{|k| k}
             if @pm != nil
-                sockets << @pm.sock
+                sockets << @pm.socket
                 connections << @pm
             end
             sockets = sockets.reject{|k| k.closed?}
             w, r, e = select(sockets, nil, nil, 0)
             for c in connections
-                if c.sock.closed? == true
+                if c.socket.closed? == true
                     c.disconnect
                 elsif w != nil
-                    for sock in w
-                        if c != nil and c.sock == sock
+                    for socket in w
+                        if c != nil and c.socket == socket
                             begin
-                                partial_data = sock.recv(1024)
+                                partial_data = socket.recv(1024)
                                 c.process(partial_data)
                             rescue
                                 c.disconnect
