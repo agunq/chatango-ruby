@@ -63,11 +63,9 @@ class WebSocketC
 
     def read
         begin
-            @recv_data = @socket.recv(1)
-            @frame << @recv_data
-            while msg = @frame.next
-                return msg.to_s.force_encoding("utf-8").encode
-            end
+            @recv_data = @socket.recv(1024)
+            @frame << @recv_data.to_s
+            return @frame
         rescue => e
             puts "frame error - #{e.message}"
             close
@@ -397,6 +395,7 @@ class Room
         @mgr = mgr
         @mqueue = nil
         @socket = WebSocketC.new
+        @status = {}
     end
     
     def name 
@@ -455,6 +454,10 @@ class Room
             onDisconnect(self)
         end
     end
+
+    def userlist
+        return @status.values
+    end
     
     def setBgMode mode
         @socket.send("msgbg:" + mode.to_s + "\r\n\x00")
@@ -496,11 +499,58 @@ class Room
         @socket.send("getpremium:1\r\n\x00")
         onConnect(self)
     end
+
+    def rcmd_g_participants args
+        args = args[1, args.length - 1].join(":")
+        args = args.split(";")
+        for data in args
+            data = data.split(":")
+            sid = data[0]
+            puid = data[2]
+            name = data[3]
+            if name == "None"
+                n = args[1].to_i.to_s[-4, 4]
+                if data[4] == "None"
+                    name = "!anon" + getAnonId(n, puid)
+                end
+            end
+            user = User name
+            @status[sid] = user
+        end
+    end
     
+    def rcmd_participant args
+        args = args[1, args.length - 1]
+        sid = args[1]
+        puid = args[2]
+        name = args[3]
+        if name == "None"
+            n = args[6].to_i.to_s[-4, 4]
+            if args[4] == "None"
+                name = "!anon" + getAnonId(n, puid)
+            end
+        end
+
+        user = User name
+        
+        #leave
+        if args[0] == "0" 
+            if @status.has_key?(sid)
+                @status.delete(sid)
+            end
+        end
+
+        #join/rejoin
+        if args[0] == "1" or args[0] == "2"
+            @status[sid] = user
+        end
+    end
+
     def rcmd_b args 
         name = args[2]
         msg = args[10, args.length].join(":")
         msg, n, f = clean_message(msg)
+        
         if name == ""
             nameColor = nil
             name = "#" + args[3]
@@ -676,9 +726,12 @@ class Chatango
                 elsif w != nil
                     for socket in w
                         begin    
-                            if c != nil and c.socket.socket == socket                
-                                partial_data = c.socket.read
-                                c.process(partial_data)
+                            if c != nil and c.socket.socket == socket  
+                                frame = c.socket.read
+                                while partial_data = frame.next
+                                    partial_data = partial_data.to_s.force_encoding("utf-8").encode
+                                    c.process(partial_data)
+                                end              
                             end
                         rescue => e
                             puts e.message
