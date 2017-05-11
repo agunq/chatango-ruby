@@ -121,22 +121,23 @@ end
 
 $users = {}
 def User(name)
-    if not $users.include?(name)
+    if not $users.include?(name.downcase)
         user = User_.new name
-        $users[name] = user
+        $users[name.downcase] = user
     else
-        user = $users[name]
+        user = $users[name.downcase]
     end
     return user
 end
 
+
 class User_
 
-    attr_accessor :name, :rawname, :nameColor, :fontSize, :fontFace, :fontColor
+    attr_accessor :name, :puid, :nameColor, :fontSize, :fontFace, :fontColor
 
     def initialize(name)
         @name = name
-        @rawname = name
+        @puid = nil
         @nameColor = "000"
         @fontSize = 12
         @fontFace = "0"
@@ -413,7 +414,7 @@ class Room
         onConnect(self)
     end
 
-    def rcmd_g_participants args
+def rcmd_g_participants args
         args = args[1, args.length - 1].join(":")
         args = args.split(";")
         for data in args
@@ -422,12 +423,13 @@ class Room
             puid = data[2]
             name = data[3]
             if name == "None"
-                n = args[1].to_i.to_s[-4, 4]
+                n = data[1].to_i.to_s[-4, 4]
                 if data[4] == "None"
                     name = "!anon" + getAnonId(n, puid)
                 end
             end
             user = User name
+            user.puid = puid
             @status[sid] = user
         end
     end
@@ -445,17 +447,20 @@ class Room
         end
 
         user = User name
-        
+        user.puid = puid
+
         #leave
         if args[0] == "0" 
-            if @status.has_key?(sid)
+            if @status.key?(sid)
                 @status.delete(sid)
+                onLeave(self, user)
             end
         end
 
         #join/rejoin
         if args[0] == "1" or args[0] == "2"
             @status[sid] = user
+            onJoin(self, user)
         end
     end
 
@@ -509,7 +514,13 @@ class Room
     end
     
     def onMessage(room, user, message)
-        callEvent(:onMessage, room, user, message)
+        callEvent(:onMessage, room, user, message)  
+    end
+    def onJoin(room, user)
+        callEvent(:onJoin, room, user)
+    end
+    def onLeave(room, user)
+        callEvent(:onLeave, room, user)
     end
     def onConnect(room)
         callEvent(:onConnect, room)
@@ -543,7 +554,7 @@ class Chatango
     
     def rooms
         rl = []
-        ro = @rooms.values.collect{|k| k}
+        ro = @rooms.values
         for r in ro
             if r.connected == true
                 rl << r
@@ -626,29 +637,34 @@ class Chatango
         callEvent(:onInitialize)
         
         while @running == true
-            sockets = @rooms.values.collect{|k| k.socket}
-            connections = @rooms.values.collect{|k| k}
-            if @pm != nil
-                sockets << @pm.socket
-                connections << @pm
-            end
-            sockets = sockets.reject{|k| k.closed?}
-            w, r, e = select(sockets, nil, nil, 0)
-            for c in connections
-                if c.socket.closed? == true
-                    c.disconnect
-                elsif w != nil
-                    for socket in w
-                        if c != nil and c.socket == socket
-                            begin
-                                partial_data = socket.recv(1024)
+            begin
+                sockets = @rooms.values.collect{|k| k.socket}
+                connections = @rooms.values
+                if @pm != nil
+                    sockets << @pm.socket
+                    connections << @pm
+                end
+                sockets = sockets.reject{|k| k.closed?}
+                w, r, e = select(sockets, nil, nil, 0)
+                for c in connections
+                    if c.socket.closed? == true
+                        c.disconnect
+                    elsif w != nil
+                        for socket in w
+                            if c.socket == socket
+                                begin
+                                    partial_data = socket.recv(1024)
+                                rescue
+                                    c.disconnect
+                                end
                                 c.process(partial_data)
-                            rescue
-                                c.disconnect
                             end
                         end
                     end
                 end
+            rescue Exception => e
+                puts e.message
+                puts e.backtrace
             end
             ticking
         end
