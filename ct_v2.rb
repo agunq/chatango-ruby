@@ -36,7 +36,7 @@ class WebSocketC
                         @handshaked = true
                     end
                 end
-            rescue => e
+            rescue Exception => e
                 puts "handshake fail - #{e.message}"
                 close
             end
@@ -54,7 +54,7 @@ class WebSocketC
         frame = ::WebSocket::Frame::Outgoing::Client.new(:data => data, :type => type, :version => @handshake.version)
         begin
             @socket.write frame.to_s
-        rescue => e
+        rescue Exception => e
             @pipe_broken = true
             puts "pipe broken - #{e.message}"
             close
@@ -66,7 +66,7 @@ class WebSocketC
             @recv_data = @socket.recv(1024)
             @frame << @recv_data.to_s
             return @frame
-        rescue => e
+        rescue Exception => e
             puts "frame error - #{e.message}"
             close
         end
@@ -83,7 +83,7 @@ class WebSocketC
     end
 
     def open?
-        @handshake.finished? and !@closed
+        !@closed
     end
     
 end
@@ -200,22 +200,22 @@ end
 
 $users = {}
 def User(name)
-    if not $users.include?(name)
+    if not $users.include?(name.downcase)
         user = User_.new name
-        $users[name] = user
+        $users[name.downcase] = user
     else
-        user = $users[name]
+        user = $users[name.downcase]
     end
     return user
 end
 
 class User_
 
-    attr_accessor :name, :rawname, :nameColor, :fontSize, :fontFace, :fontColor
+    attr_accessor :name, :puid, :nameColor, :fontSize, :fontFace, :fontColor
 
     def initialize(name)
         @name = name
-        @rawname = name
+        @puid = nil
         @nameColor = "000"
         @fontSize = 12
         @fontFace = "0"
@@ -509,12 +509,13 @@ class Room
             puid = data[2]
             name = data[3]
             if name == "None"
-                n = args[1].to_i.to_s[-4, 4]
+                n = data[1].to_i.to_s[-4, 4]
                 if data[4] == "None"
                     name = "!anon" + getAnonId(n, puid)
                 end
             end
             user = User name
+            user.puid = puid
             @status[sid] = user
         end
     end
@@ -532,17 +533,20 @@ class Room
         end
 
         user = User name
-        
+        user.puid = puid
+
         #leave
         if args[0] == "0" 
-            if @status.has_key?(sid)
+            if @status.key?(sid)
                 @status.delete(sid)
+                onLeave(self, user)
             end
         end
 
         #join/rejoin
         if args[0] == "1" or args[0] == "2"
             @status[sid] = user
+            onJoin(self, user)
         end
     end
 
@@ -605,6 +609,12 @@ class Room
     def onDisconnect(room)
         callEvent(:onDisconnect, room)
     end
+    def onJoin(room, user)
+        callEvent(:onJoin, room, user)
+    end
+    def onLeave(room, user)
+        callEvent(:onLeave, room, user)
+    end
     def inspect
         return "<Room: #{name}>"
     end
@@ -631,7 +641,7 @@ class Chatango
     
     def rooms
         rl = []
-        ro = @rooms.values.collect{|k| k}
+        ro = @rooms.values
         for r in ro
             if r.connected == true
                 rl << r
@@ -712,33 +722,33 @@ class Chatango
         callEvent(:onInitialize)
 
         while @running == true
-            sockets = @rooms.values.collect{|k| k.socket.socket }
-            connections = @rooms.values.collect{|k| k}
-            if @pm != nil
-                sockets << @pm.socket.socket
-                connections << @pm
-            end
-            sockets = sockets.reject{|k| k == nil}
-            w, r, e = select(sockets, nil, nil, 0)
-            for c in connections
-                if c.socket.open? == false
-                    c.disconnect
-                elsif w != nil
-                    for socket in w
-                        begin    
-                            if c != nil and c.socket.socket == socket  
+            begin
+                sockets = @rooms.values.collect{|k| k.socket.socket }
+                connections = @rooms.values
+                if @pm != nil
+                    sockets << @pm.socket.socket
+                    connections << @pm
+                end
+                sockets = sockets.reject{|k| k == nil}
+                w, r, e = select(sockets, nil, nil, 0)
+                for c in connections
+                    if c.socket.open? == false
+                        c.disconnect
+                    elsif w != nil
+                        for socket in w  
+                            if c.socket.socket == socket  
                                 frame = c.socket.read
                                 while partial_data = frame.next
                                     partial_data = partial_data.to_s.force_encoding("utf-8").encode
                                     c.process(partial_data)
                                 end              
-                            end
-                        rescue => e
-                            puts e.message
-                            puts e.backtrace            
+                            end          
                         end
                     end
                 end
+            rescue Exception => e  
+                puts e.message
+                puts e.backtrace
             end
             ticking
         end
