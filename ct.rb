@@ -161,11 +161,11 @@ class User_
     end
 
     def inspect
-        return "<User: #{rawname}>"
+        return "<User: #{name}>"
     end
 
     def to_s
-        return "<User: #{rawname}>"
+        return "<User: #{name}>"
     end
 end
 
