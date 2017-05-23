@@ -133,7 +133,7 @@ end
 
 class User_
 
-    attr_accessor :name, :puid, :nameColor, :fontSize, :fontFace, :fontColor
+    attr_accessor :name, :puid, :nameColor, :fontSize, :fontFace, :fontColor, :mbg, :mrec
 
     def initialize(name)
         @name = name
@@ -142,6 +142,8 @@ class User_
         @fontSize = 12
         @fontFace = "0"
         @fontColor = "000"
+        @mbg = false
+        @mrec = false
     end
     
     def setNameColor n
@@ -172,15 +174,21 @@ end
 
 class Message
     
-    attr_accessor :user, :body, :msgid, :room
+    attr_accessor :user, :body, :msgid, :room, :ip, :time, :nameColor, :fontColor, :fontFace, :fontSize
 
-    def initialize(room, user, body, msgid)
+    def initialize(room, user, body, msgid, ip, mtime, mnameColor, mfontColor, mfontFace, mfontSize)
         @user = user
         @body = body
         @msgid = msgid
         @room = room
+        @ip = ip
+        @time = mtime
+        @nameColor = mnameColor
+        @fontColor = mfontColor
+        @fontFace = mfontFace
+        @fontSize = mfontSize
     end
-    
+
     def attach(room, msgid)
         @msgid = msgid
         @room = room
@@ -234,7 +242,7 @@ class Pm
    
     def ping h
         #puts h
-        @socket.write("\r\n\x00")
+        @socket.write("")
     end
    
     def connect
@@ -338,7 +346,7 @@ class Room
     
     def ping h
         #puts h
-        @socket.write("\r\n\x00")
+        @socket.write("")
     end
     
     def connect
@@ -414,7 +422,7 @@ class Room
         onConnect(self)
     end
 
-def rcmd_g_participants args
+    def rcmd_g_participants args
         args = args[1, args.length - 1].join(":")
         args = args.split(";")
         for data in args
@@ -483,17 +491,39 @@ def rcmd_g_participants args
         end 
         user = User name
         fontColor, fontFace, fontSize = parseFont(f)
-        msg = Message.new(self, user, msg, args[4])
+        mtime = args[1].to_f
+        msg = Message.new(self, user, msg, args[4], args[7], mtime, nameColor, fontColor, fontFace, fontSize)
         @mqueue  = msg
     end
     
-    def rcmd_u args 
+    def rcmd_u args
         if @mqueue
             msg = @mqueue 
             if msg.msgid == args[1]
+                if msg.user != self.user
+                    msg.user.fontColor = msg.fontColor
+                    msg.user.fontFace = msg.fontFace
+                    msg.user.fontSize = msg.fontSize
+                    msg.user.nameColor = msg.nameColor
+                end
                 msg.attach(self, args[2])
+                @mqueue = nil
             end
             onMessage(self, msg.user, msg)
+        end
+    end
+
+    def rcmd_premium args
+        if args[2].to_i > Time.now.to_i
+            @premium = true
+            if @mgr.user.mbg
+                self.setBgMode(1)
+            end
+            if @mgr.user.mrec
+                self.setRecordingMode(1)
+            end
+        else
+        @premium = false
         end
     end
     
@@ -592,14 +622,30 @@ class Chatango
     end
     
     def enableBg
+        self.user.mbg = true
         for room in rooms
             room.setBgMode(1)
         end
     end
     
     def disableBg
+        self.user.mbg = false
         for room in rooms
             room.setBgMode(0)
+        end
+    end
+
+    def enableRecording
+        self.user.mrec = true
+        for room in rooms
+            room.setRecordingMode(1)
+        end
+    end
+    
+    def enableRecording
+        self.user.mrec = false
+        for room in rooms
+            room.setRecordingMode(0)
         end
     end
     
@@ -654,7 +700,7 @@ class Chatango
                             if c.socket == socket
                                 begin
                                     partial_data = socket.recv(1024)
-                                rescue
+                                rescue Exception => e
                                     c.disconnect
                                 end
                                 c.process(partial_data)
