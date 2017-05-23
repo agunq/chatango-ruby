@@ -174,12 +174,14 @@ end
 
 class Message
     
-    attr_accessor :user, :body, :msgid, :room, :ip, :time, :nameColor, :fontColor, :fontFace, :fontSize
+    attr_accessor :user, :body, :msgid, :sid, :unid, :room, :ip, :time, :nameColor, :fontColor, :fontFace, :fontSize
 
-    def initialize(room, user, body, msgid, ip, mtime, mnameColor, mfontColor, mfontFace, mfontSize)
+    def initialize(room, user, body, msgunid, msgsid, ip, mtime, mnameColor, mfontColor, mfontFace, mfontSize)
         @user = user
         @body = body
-        @msgid = msgid
+        @msgid = ""
+        @unid = msgunid
+        @sid = msgsid
         @room = room
         @ip = ip
         @time = mtime
@@ -492,24 +494,24 @@ class Room
         user = User name
         fontColor, fontFace, fontSize = parseFont(f)
         mtime = args[1].to_f
-        msg = Message.new(self, user, msg, args[4], args[7], mtime, nameColor, fontColor, fontFace, fontSize)
+        msg = Message.new(self, user, msg, args[5], args[6], args[7], mtime, nameColor, fontColor, fontFace, fontSize)
         @mqueue  = msg
     end
     
     def rcmd_u args
         if @mqueue
             msg = @mqueue 
-            if msg.msgid == args[1]
-                if msg.user != self.user
+            if msg.sid == args[1]
+                msg.attach(self, args[2])
+                if msg.user != @mgr.user
                     msg.user.fontColor = msg.fontColor
                     msg.user.fontFace = msg.fontFace
                     msg.user.fontSize = msg.fontSize
                     msg.user.nameColor = msg.nameColor
                 end
-                msg.attach(self, args[2])
                 @mqueue = nil
+                onMessage(self, msg.user, msg)
             end
-            onMessage(self, msg.user, msg)
         end
     end
 
