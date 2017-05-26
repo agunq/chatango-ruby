@@ -22,9 +22,7 @@ class WebSocketC
         @pipe_broken = false
         @frame = ::WebSocket::Frame::Incoming::Client.new
         @closed = false
-
         @socket.write @handshake.to_s
-
         while !@handshaked do
             begin
                 unless @recv_data = @socket.getc
@@ -38,7 +36,8 @@ class WebSocketC
                 end
             rescue Exception => e
                 puts "handshake fail - #{e.message}"
-                close
+                @handshaked = true
+                self.close
             end
         end
     end
@@ -57,7 +56,7 @@ class WebSocketC
         rescue Exception => e
             @pipe_broken = true
             puts "pipe broken - #{e.message}"
-            close
+            self.close
         end
     end
 
@@ -68,7 +67,7 @@ class WebSocketC
             return @frame
         rescue Exception => e
             puts "frame error - #{e.message}"
-            close
+            self.close
         end
     end
 
