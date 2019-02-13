@@ -3,8 +3,8 @@ require_relative 'ct'
 class Bot < Chatango	
 
 	def onInitialize
-		self.user.setFontColor "ECE4F1"
-		self.user.setNameColor "FCF"
+		self.user.setFontColor "3333ff"
+		self.user.setNameColor "00f"
 		self.enableBg
 	end
 
@@ -26,12 +26,8 @@ class Bot < Chatango
 		puts "#{room.name}: <#{user.name}> #{message.body}"
 		if message.body == "halo"
 			room.message "halo juga " + user.name
-    
 		end
-    
 	end
-
 end
 
 Bot.new.start
-
