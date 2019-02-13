@@ -199,6 +199,9 @@ end
 
 $users = {}
 def User(name)
+    if name == nil
+        name = ""
+    end
     if not $users.include?(name.downcase)
         user = User_.new name
         $users[name.downcase] = user
