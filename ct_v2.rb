@@ -20,7 +20,7 @@ class WebSocketC
         @handshake = ::WebSocket::Handshake::Client.new :url => url, :headers => options[:headers]
         @handshaked = false
         @pipe_broken = false
-        @frame = ::WebSocket::Frame::Incoming::Client.new
+        @rframe = ::WebSocket::Frame::Incoming::Client.new(version: @handshake.version)
         @closed = false
         @socket.write @handshake.to_s
         while !@handshaked do
@@ -48,11 +48,11 @@ class WebSocketC
     end
 
     def send(data, options={:type => :text})
-        return if !@handshaked or @closed
+        return if !@handshaked or @closed 
         type = options[:type]
-        frame = ::WebSocket::Frame::Outgoing::Client.new(:data => data, :type => type, :version => @handshake.version)
+        @wframe = ::WebSocket::Frame::Outgoing::Client.new(:data => data, :type => type, :version => @handshake.version)
         begin
-            @socket.write frame.to_s
+            @socket.write @wframe.to_s
         rescue Exception => e
             @pipe_broken = true
             puts "pipe broken - #{e.message}"
@@ -63,8 +63,8 @@ class WebSocketC
     def read
         begin
             @recv_data = @socket.recv(1024)
-            @frame << @recv_data.to_s
-            return @frame
+            @rframe << @recv_data.to_s
+            return @rframe
         rescue Exception => e
             puts "frame error - #{e.message}"
             self.close
@@ -253,16 +253,17 @@ end
 
 class Message
     
-    attr_accessor :user, :body, :msgid, :sid, :unid, :room, :ip, :time, :nameColor, :fontColor, :fontFace, :fontSize
+    attr_accessor :user, :body, :msgid, :sid, :unid, :room, :ip, :badge, :time, :nameColor, :fontColor, :fontFace, :fontSize
 
-    def initialize(room, user, body, msgunid, msgsid, ip, mtime, mnameColor, mfontColor, mfontFace, mfontSize)
+    def initialize(room, user, body, msgunid, sid, ip, badge, mtime, mnameColor, mfontColor, mfontFace, mfontSize)
         @user = user
         @body = body
         @msgid = ""
         @unid = msgunid
-        @sid = msgsid
+        @sid = sid
         @room = room
         @ip = ip
+		@badge = badge
         @time = mtime
         @nameColor = mnameColor
         @fontColor = mfontColor
@@ -275,9 +276,8 @@ class Message
         @room = room
     end
     
-    def detach(room, msgid)
-        @msgid = msgid
-        @room = room
+    def detach
+        @msgid = nil
     end
     
     def inspect
@@ -287,13 +287,22 @@ end
 
 
 class Pm
+	
+	attr_accessor :wbyte, :blocklist, :contacts
    
     def initialize(mgr)
         @auid = nil
         @server = "c1.chatango.com"
         @connected = false
         @mgr = mgr
+		@wbyte = ""
+		@wlockbyte = ""
+		@wlock = false
+		@firstCommand = true
         @socket = WebSocketC.new
+		@status = {}
+		@blocklist = []
+		@contacts = []
     end
     
     def socket
@@ -319,13 +328,14 @@ class Pm
             if cookie
                 @auid = cookie[0]
             end
-            @socket.send("tlogin:#{@auid}:2\x00")
+            sendCommand("tlogin", @auid, "2")
+			setWriteLock(true)
         end
     end
    
     def ping h
         #puts h
-        @socket.send("\r\n\x00")
+        sendCommand("")
     end
    
     def connect
@@ -337,7 +347,7 @@ class Pm
     end
 
     def message user, msg
-        @socket.send("msg:#{user}:#{msg}\r\n\x00")
+        sendCommand("msg", user, msg)
     end
    
     def disconnect
@@ -348,15 +358,48 @@ class Pm
             @connected = false
         end
     end
+	
+	def addContact(user)
+		user = User user
+		unless user.include?(@contacts)
+			sendCommand("wlaad", user.name.downcase)
+			@contacts << user
+			callEvent(:onPMContactAdd, self, user)
+		end
+	end
+	
+	def removeContact(user)
+		user = User user
+		if user.include?(@contacts)
+			sendCommand("wldelete", user.name.downcase)
+			@contacts.delete(user)
+			callEvent(:onPMContactRemove, self, user)
+		end
+	end
+	
+	def block(user)
+		user = User user
+		unless @blocklist.include?(user)
+			sendCommand("block", user.name.downcase, user.name.downcase, "S")
+			@blocklist << user
+			callEvent(:onPMBlock, self, user)
+		end
+	end
+	
+	def unblock(user)
+		user = User user
+		if @blocklist.include?(user)
+			sendCommand("unblock", user.name.downcase)
+		end
+	end
    
     def process(data)
         if data
             data = data.split("\x00")
-            #puts data.to_s
             for d in data
                 food = d.split(":")
                 if food.length > 0
-                    cmd = "rcmd_" + food[0]
+                    cmd = "rcmd_" + food[0].rstrip
                     if self.respond_to?(cmd)
                         self.send(cmd, food)
                     end
@@ -364,13 +407,78 @@ class Pm
             end
         end
     end 
+	
+	def rcmd_OK args
+		setWriteLock(false)
+		sendCommand("wl")
+		sendCommand("getblock")
+		callEvent(:onPMConnect, self)
+	end
+	
+	def rcmd_wl args
+		@contacts = []
+		data = args[1, args.size-1]
+		for i in (0..(data.size/4)-1)
+			name, last_on, is_on, idle = data[i * 4, i * 4 + 4]
+			user = User(name)
+			if last_on == "None"
+				nil
+			elsif not is_on == "on"
+				@status[user] = [last_on.to_i, false, 0]
+			elsif idle == "0"
+				@status[user] = [last_on.to_i, true, 0]
+			else
+				@status[user] = [last_on.to_i, true, Time.now.to_f - idle.to_i * 60]
+			end
+			@contacts << user
+		end
+		callEvent(:onPMContactlistReceive)
+	end
+	
+	def rcmd_block_list(args)
+		@blocklist = []
+		for name in args
+			if name != ""
+				user = User name
+				@blocklist << user
+			end
+		end
+	end
+
+	def rcmd_DENIED(args)
+		disconnect
+		callEvent(:onLoginFail)
+	end
    
     def rcmd_msg args
         user = User args[1]
         body = strip_html args[6, args.length].join ":"
         body = body[0, body.length-2]
-        onPMMessage(self, user, body)
+        callEvent(:onPMMessage, self, user, body)
     end
+	
+	def rcmd_msgoff(args)
+		user = User(args[1])
+		body = strip_html args[6, args.length].join ":"
+		body = body[0, body.length-2]
+		callEvent(:onPMOfflineMessage, self, user, body)
+	end
+	
+	def rcmd_kickingoff(args)
+		disconnect
+	end 
+	
+	def rcmd_toofast(args)
+		disconnect
+	end
+	
+	def rcmd_unblocked(user)
+		user = User user
+		if user.include?(@blocklist)
+			@blocklist.delete(user)
+			callEvent(:onPMUnblock, self, user)
+		end
+	end
    
     def setInterval timeout, evt, *args
         task = Task_.new(self, timeout, true, evt, *args)
@@ -387,10 +495,32 @@ class Pm
             @mgr.send(evt, *args)
         end
     end
-   
-    def onPMMessage(pm, user, message)
-        callEvent(:onPMMessage, pm, user, message)
-    end
+	
+	def write args
+		if @wlock == true
+			@wlockbyte += args
+		else
+			@wbyte += args
+		end
+	end
+	
+	def setWriteLock args
+		@wlock = args
+		if @wlock == false
+			write(@wlockbyte)
+			@wlockbyte = ""
+		end
+	end
+	
+	def sendCommand(*args)
+		if @firstCommand == true
+			terminator = "\x00"
+			@firstCommand = false
+		else
+			terminator = "\r\n\x00"
+		end
+		write args.join(":") + terminator
+	end
     
     def inspect
         return "<Pm: #{@mgr.user}>"
@@ -398,6 +528,8 @@ class Pm
 end 
 
 class Room
+	
+	attr_accessor :wbyte, :owner, :mods, :banlist, :unbanlist
     
     def initialize(mgr, name)
         @name = name
@@ -405,9 +537,19 @@ class Room
         @server = getServer(name)
         @connected = false
         @mgr = mgr
-        @mqueue = nil
+		@wbyte = ""
+		@wlockbyte = ""
+		@wlock = false
+		@firstCommand = true
+        @mqueue = {}
         @socket = WebSocketC.new
         @status = {}
+		@owner = ""
+		@mods = {}
+		@history = []
+		@log_i = []
+		@banlist = {}
+		@unbanlist = {}
     end
     
     def name 
@@ -424,16 +566,17 @@ class Room
     
     def auth
         if @mgr.username !=nil and @mgr.password !=nil
-            @socket.send("bauth:#@name:#@uid:#{@mgr.username}:#{@mgr.password}\x00")
+            sendCommand("bauth", @name, @uid, @mgr.username, @mgr.password)
         # login as anon
         else
-            @socket.send("bauth:#@name:#@uid\x00")
+            sendCommand("bauth", @name, @uid)
         end
+		setWriteLock(true)
     end
     
     def ping h
         #puts h
-        @socket.send("\r\n\x00")
+        sendCommand("")
     end
     
     def connect
@@ -453,7 +596,7 @@ class Room
         s, c, f = @mgr.user.fontSize, @mgr.user.fontColor, @mgr.user.fontFace
         for msg in msgs
             msg = "<n#{@mgr.user.nameColor}/><f x#{s}#{c}=\"#{f}\">#{msg}</f>"
-            @socket.send("bmsg:t12r:#{msg}\r\n\x00")
+            sendCommand("bmsg", "t12r", msg)
         end
     end
     
@@ -463,7 +606,7 @@ class Room
                 @socket.close   
             end
             @connected = false
-            onDisconnect(self)
+            callEvent(:onDisconnect, self)
         end
     end
 
@@ -472,20 +615,120 @@ class Room
     end
     
     def setBgMode mode
-        @socket.send("msgbg:" + mode.to_s + "\r\n\x00")
+        sendCommand("msgbg", mode.to_s)
     end
     
     def setRecordingMode mode
-        @socket.send("msgmedia:" + mode.to_s + "\r\n\x00")
+        sendCommand("msgmedia", mode.to_s)
     end
-    
+	
+	def login(name, pass=nil)
+		if pass != nil
+			sendCommand("blogin", name.to_s, pass.to_s)
+		else
+			sendCommand("blogin", name.to_s)
+		end
+	end
+	
+	def logout
+		sendCommand("blogout")
+	end
+	
+	def addMod(user)
+		sendCommand("addmod", user.name.to_s)
+    end
+	
+	def removeMod(user)
+		sendCommand("removemod", user.name.to_s)
+	end
+	
+	def clearall
+		sendCommand("clearall")
+		sendCommand("getannouncement")
+	end
+	
+	def rawBan(name, ip, unid)
+		sendCommand("block", unid.to_s, ip.to_s, name.to_s.downcase)
+	end
+	
+	def ban(user)
+		msg = getLastMessage user
+		rawBan(msg.user.name, msg.ip, msg.unid)
+	end
+	
+	def getBanRecord user
+		user = User user
+		if @banlist.keys.include?(user)
+			return @banlist[user]
+		end
+	end
+	
+	def rawUnban name, ip, unid
+		sendCommand("removeblock", unid, ip, name)
+	end
+	
+	def unban user
+		rec = getBanRecord(user)
+		if rec
+			rawUnban(rec["target"].name, rec["ip"], rec["unid"])
+		end
+	end
+	
+	def requestBanList
+		sendCommand("blocklist", "block", "", "next", "500")
+	end
+	
+	def requestUnBanList
+		sendCommand("blocklist", "unblock", "", "next", "500")
+	end
+	
+	def flag message
+		sendCommand("g_flag", message.msgid)
+	end
+	
+	def flagUser user
+		msg = getLastMessage(user)	
+		if msg
+			flag(msg)
+		end
+	end
+	
+	def deleteMessage message
+		sendCommand("delmsg", message.msgid)
+	end
+	
+	def deleteUser user
+		msg = getLastMessage(user)
+		if msg
+			sendCommand("delmsg", msg.msgid)
+		end
+	end
+	
+	def delete message
+		deleteMessage(message)
+	end
+	
+	def rawClearUser unid, ip, user
+		sendCommand("delallmsg", unid, ip, user)
+	end
+	
+	def clearUser  user
+		msg = getLastMessage(user)
+		if msg
+			if ["!","#"].include?(msg.user.name[0]) 
+				rawClearUser(msg.unid, msg.ip, "")
+			else
+				rawClearUser(msg.unid, msg.ip, msg.user.name.downcase)
+			end
+		end
+	end
     def process(data)
         if data
             data = data.split("\x00")
             for d in data
                 food = d.split(":")
                 if food.length > 0
-                    cmd = "rcmd_" + food[0]
+                    cmd = "rcmd_" + food[0].rstrip
                     if self.respond_to?(cmd)
                         self.send(cmd, food)
                     end
@@ -495,6 +738,7 @@ class Room
     end 
     
     def rcmd_ok args
+		setWriteLock(false)
         if args[3] == "C" and @mgr.username == nil and @mgr.password == nil
             n = args[5].split('.')[0]
             n = n[-4, n.length]
@@ -502,14 +746,26 @@ class Room
             pid = "!anon" + getAnonId(n, aid)
             @mgr.user.setNameColor n
         elsif args[3] == "C" and @mgr.password == nil
-            @socket.send("blogin:#{@mgr.username}\r\n\x00")
+            sendCommand("blogin", @mgr.username)
         end
+		@owner = User args[1]
+		mods = args[7].split(";").collect{|x| [User(x.split(",")[0]), x.split(",")[1]] }
+		for mod, v in mods
+			@mods[mod] = v
+		end
     end
     
     def rcmd_inited args
-        @socket.send("g_participants:start\r\n\x00")
-        @socket.send("getpremium:1\r\n\x00")
-        onConnect(self)
+        sendCommand("g_participants", "start")
+        sendCommand("getpremium", "1")
+        callEvent(:onConnect, self)
+		for msg in @log_i.reverse
+			user = msg.user
+			callEvent("onHistoryMessage", self, user, msg)
+			addHistory msg
+		end
+		@log_i = []
+		setWriteLock(false)
     end
 
     def rcmd_g_participants args
@@ -551,14 +807,14 @@ class Room
         if args[0] == "0" 
             if @status.key?(sid)
                 @status.delete(sid)
-                onLeave(self, user)
+                callEvent(:onLeave, self, user)
             end
         end
 
         #join/rejoin
         if args[0] == "1" or args[0] == "2"
             @status[sid] = user
-            onJoin(self, user)
+            callEvent(:onJoin, self, user)
         end
     end
 
@@ -566,7 +822,6 @@ class Room
         name = args[2]
         msg = args[10, args.length].join(":")
         msg, n, f = clean_message(msg)
-        
         if name == ""
             nameColor = nil
             name = "#" + args[3]
@@ -583,25 +838,53 @@ class Room
         user = User name
         fontColor, fontFace, fontSize = parseFont(f)
         mtime = args[1].to_f
-        msg = Message.new(self, user, msg, args[5], args[6], args[7], mtime, nameColor, fontColor, fontFace, fontSize)
-        @mqueue  = msg
+        msg = Message.new(self, user, msg, args[5], args[6], args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+		@mqueue[args[6]]  = msg
     end
 
     def rcmd_u args
         if @mqueue
-            msg = @mqueue 
-            if msg.sid == args[1]
-                msg.attach(self, args[2])
-                if msg.user != @mgr.user
-                    msg.user.fontColor = msg.fontColor
-                    msg.user.fontFace = msg.fontFace
-                    msg.user.fontSize = msg.fontSize
-                    msg.user.nameColor = msg.nameColor
-                end
-                @mqueue = nil
-                onMessage(self, msg.user, msg)
+			if @mqueue.keys.include?(args[1])
+            	msg = @mqueue[args[1]] 
+            	msg.attach(self, args[2])
+            	if msg.user != @mgr.user
+                	msg.user.fontColor = msg.fontColor
+                	msg.user.fontFace = msg.fontFace
+                	msg.user.fontSize = msg.fontSize
+                	msg.user.nameColor = msg.nameColor
+				end
+				@mqueue[args[1]] = nil
+				addHistory msg
+				callEvent(:onMessage, self, msg.user, msg)
+			else
+				puts "som secret stuff"
             end
         end
+    end
+	
+	def rcmd_i args 
+        name = args[2]
+        msg = args[10, args.length].join(":")
+        msg, n, f = clean_message(msg)
+        if name == ""
+            nameColor = nil
+            name = "#" + args[3]
+            if name == "#"
+                name = "!anon" + getAnonId(n, args[4])
+            end
+        else
+            if n
+                nameColor = n
+            else 
+                nameColor = nil
+            end
+        end 
+        user = User name
+        fontColor, fontFace, fontSize = parseFont(f)
+        mtime = args[1].to_f
+		msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+		msg.attach self, args[6]
+		@log_i << msg
     end
 
     def rcmd_premium args
@@ -617,6 +900,97 @@ class Room
         @premium = false
         end
     end
+	
+	def rcmd_delete args
+		msg = getMessageById args[1]
+		if @history.include? msg
+			@history.delete msg
+			callEvent("onMessageDelete", self, msg.user, msg)
+		end
+	end
+	
+	def rcmd_deleteall args
+		for msgid in args
+			rcmd_delete(["delete", msgid])
+		end
+	end
+	
+	def rcmd_n args
+		@userCount = args[1].to_i(16)
+		callEvent("onUserCountChange", self)
+	end	
+	
+	def rcmd_blocklist args
+		data = args[1, args.size-1]
+		@banlist = {}
+		sections = data.join(":").split(";")
+		for section in sections
+			params = section.split(":")
+			next if params.size != 5
+			next if params[2] == ""
+			user = User(params[2])
+			@banlist[user] = {
+				"unid" => params[0],
+				"ip" => params[1],
+				"target" => user,
+				"time" => params[3].to_f,
+				"src" => User(params[4])
+				}
+			callEvent("onBanlistUpdate", self)
+		end
+	end
+	def rcmd_unblocklist args
+		data = args[1, args.size-1]
+		@unbanlist = {}
+		sections = data.join(":").split(";")
+		for section in sections
+			params = section.split(":")
+			next if params.size != 5
+			next if params[2] == ""
+			user = User(params[2])
+			@unbanlist[user] = {
+				"unid" => params[0],
+				"ip" => params[1],
+				"target" => user,
+				"time" => params[3].to_f,
+				"src" => User(params[4])
+				}
+			callEvent("onUnbanlistUpdate", self)
+		end
+	end
+	
+	def rcmd_blocked args
+		return if args[3] == ""
+		target = User(args[3])
+		user = User(args[4])
+		@banlist[target] = {"unid" => args[1], "ip" => args[2], "target" => target, "time" => args[5].to_f, "src" => user}
+		callEvent("onBan", self, user, target)
+	end
+	
+	def rcmd_unblocked args
+		return if args[3] == ""
+		target = User(args[3])
+		user = User(args[4])
+		@unbanlist[target] = {"unid" => args[1], "ip" => args[2], "target" => target, "time" => args[5].to_f, "src" => user}
+		callEvent("onUnban", self, user, target)
+	end
+	
+	def rcmd_updateprofile(args)
+		user = User(args[1])
+		callEvent(:onUpdateProfile, self, user)
+	end
+	
+	def rcmd_show_fw(args)
+		callEvent(:onFloodWarning, self)
+	end
+	
+	def rcmd_show_tb(args)
+		callEvent(:onFloodBan, self)
+	end
+	
+	def rcmd_tb(args)
+		callEvent(:onFloodBanRepeat, self)
+	end
     
     def setInterval timeout, evt, *args
         task = Task_.new(self, timeout, true, evt, *args)
@@ -627,28 +1001,66 @@ class Room
         task = Task_.new(self, timeout, false, evt, *args)
         @mgr.add_task task
     end
-    
+	
+	def addHistory msg
+		@history << msg
+		lastmsg = @history[0]
+		if @history.size > 100
+			if @history.include?(lastmsg)
+				@history.delete lastmsg
+			end
+		end
+	end
+	
+	def getLastMessage user
+		user = User user
+		for msg in @history.reverse
+			if msg.user == user
+				return msg
+			end
+		end
+	end
+	
+	def getMessageById msgid
+		for msg in @history.reverse
+			if msg.msgid == msgid
+				return msg
+			end
+		end
+	end
+	
     def callEvent evt, *args
         if @mgr.respond_to?(evt)
             @mgr.send(evt, *args)
         end
     end
-    
-    def onMessage(room, user, message)
-        callEvent(:onMessage, room, user, message)
-    end
-    def onConnect(room)
-        callEvent(:onConnect, room)
-    end
-    def onDisconnect(room)
-        callEvent(:onDisconnect, room)
-    end
-    def onJoin(room, user)
-        callEvent(:onJoin, room, user)
-    end
-    def onLeave(room, user)
-        callEvent(:onLeave, room, user)
-    end
+	
+	def write args
+		if @wlock == true
+			@wlockbyte += args
+		else
+			@wbyte += args
+		end
+	end
+	
+	def setWriteLock args
+		@wlock = args
+		if @wlock == false
+			write(@wlockbyte)
+			@wlockbyte = ""
+		end
+	end
+	
+	def sendCommand(*args)
+		if @firstCommand == true
+			terminator = "\x00"
+			@firstCommand = false
+		else
+			terminator = "\r\n\x00"
+		end
+		write args.join(":") + terminator
+	end
+
     def inspect
         return "<Room: #{name}>"
     end
@@ -764,6 +1176,7 @@ class Chatango
         for r in rooms
             joinRoom(r)
         end
+		
         if @username != nil and @password != nil
             @pm = Pm.new(self)
             @pm.connect
@@ -773,19 +1186,19 @@ class Chatango
 
         while @running == true
             begin
-                sockets = @rooms.values.collect{|k| k.socket.socket }
                 connections = @rooms.values
                 if @pm != nil
-                    sockets << @pm.socket.socket
                     connections << @pm
                 end
-                sockets = sockets.reject{|k| k == nil}
-                w, r, e = select(sockets, nil, nil, 0)
+                sockets = connections.collect{|c| c.socket.socket}.reject{|x| x == nil}
+				wsockets = connections.collect{|c| c.socket.socket if c.wbyte != "" }.reject{|x| x == nil}
+                rd, wr, e = select(sockets, wsockets, nil, 0.2)
                 for c in connections
                     if c.socket.open? == false
                         c.disconnect
-                    elsif w != nil
-                        for socket in w  
+					end
+                    if rd != nil
+                        for socket in rd  
                             if c.socket.socket == socket  
                                 frame = c.socket.read
                                 while partial_data = frame.next
@@ -794,7 +1207,15 @@ class Chatango
                                 end              
                             end          
                         end
-                    end
+					end
+					if wr != nil
+						for socket in wr
+							if c.socket.socket == socket  
+								c.socket.send(c.wbyte)
+								c.wbyte = ""
+							end
+						end
+					end		
                 end
             rescue Exception => e  
                 puts e.message
