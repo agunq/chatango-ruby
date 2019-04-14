@@ -10,8 +10,8 @@ class Bot < Chatango
 
 	def onPMMessage(pm, user, message)
 		puts "<PM>: <#{user.name}> #{message}"
-		#text = "ya ?"
-		#pm.message user.name, "#{text}"
+		text = "ya ?"
+		pm.message user.name, "#{text}"
 	end
 
 	def onConnect(room)
@@ -29,5 +29,8 @@ class Bot < Chatango
 		end
 	end
 end
+
+#another example to start your bot
+#Bot.new.start(["GroupName1", "GroupName2"], "UserName", "Password")
 
 Bot.new.start
