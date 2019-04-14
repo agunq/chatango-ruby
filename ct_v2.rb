@@ -432,7 +432,7 @@ class Pm
 			end
 			@contacts << user
 		end
-		callEvent(:onPMContactlistReceive)
+		callEvent(:onPMContactlistReceive, self)
 	end
 
 	def rcmd_block_list(args)
@@ -447,7 +447,7 @@ class Pm
 
 	def rcmd_DENIED(args)
 		disconnect
-		callEvent(:onLoginFail)
+		callEvent(:onLoginFail, self)
 	end
 
 	def rcmd_msg args
