@@ -42,7 +42,6 @@ class WebSocketC
 		end
 	end
 
-
 	def socket
 		return @socket
 	end
@@ -584,6 +583,7 @@ class Room
 		@socket.connect "ws://#{@server}:8080", options = {:headers => headers}
 		auth
 		@connected = true
+		@status.clear
 		setInterval(20, :ping, "Ping! at #{@name}")
 	end
 
@@ -635,11 +635,11 @@ class Room
 	end
 
 	def addMod(user)
-		sendCommand("addmod", user.name.to_s)
+		sendCommand("addmod", user.to_s.downcase)
 	end
 
 	def removeMod(user)
-		sendCommand("removemod", user.name.to_s)
+		sendCommand("removemod", user.to_s.downcase)
 	end
 
 	def clearall
@@ -722,6 +722,7 @@ class Room
 			end
 		end
 	end
+	
 	def process(data)
 		if data
 			data = data.split("\x00")
@@ -939,6 +940,7 @@ class Room
 			callEvent("onBanlistUpdate", self)
 		end
 	end
+	
 	def rcmd_unblocklist args
 		data = args[1, args.size-1]
 		@unbanlist = {}
@@ -1067,6 +1069,7 @@ class Room
 end
 
 class Chatango
+	
 	def initialize
 		@rooms = {}
 		@user = nil
@@ -1076,6 +1079,7 @@ class Chatango
 		@running = false
 		@pm = nil
 	end
+	
 	def pm
 		return @pm
 	end
@@ -1099,12 +1103,15 @@ class Chatango
 	def username
 		return @username
 	end
+	
 	def password
 		return @password
 	end
+	
 	def add_task newtask
 		@tasks << newtask
 	end
+	
 	def del_task task
 		if @tasks.include?(task)
 			@tasks.delete task
@@ -1254,6 +1261,12 @@ class Chatango
 			@pm.disconnect
 		end
 		@running = false
+	end
+	
+	def getRoom(name)
+		if @rooms.key?(name) == true
+			return @rooms[name]
+		end
 	end
 
 	def joinRoom(name)
