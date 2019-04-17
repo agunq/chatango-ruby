@@ -528,6 +528,7 @@ class Room
 		@socket = TCPSocket.new @server, 443
 		auth
 		@connected = true
+		@status.clear
 		setInterval(20, :ping, "Ping! at #{@name}")
 	end
 
@@ -579,11 +580,11 @@ class Room
 	end
 
 	def addMod(user)
-		sendCommand("addmod", user.name.to_s)
+		sendCommand("addmod", user.to_s.downcase)
 	end
 
 	def removeMod(user)
-		sendCommand("removemod", user.name.to_s)
+		sendCommand("removemod", user.to_s.downcase)
 	end
 
 	def clearall
@@ -1033,6 +1034,7 @@ class Room
 end
 
 class Chatango
+
 	def initialize
 		@rooms = {}
 		@user = nil
@@ -1042,6 +1044,7 @@ class Chatango
 		@running = false
 		@pm = nil
 	end
+
 	def pm
 		return @pm
 	end
@@ -1228,6 +1231,12 @@ class Chatango
 			@pm.disconnect
 		end
 		@running = false
+	end
+
+	def getRoom(name)
+		if @rooms.key?(name) == true
+			return @rooms[name]
+		end
 	end
 
 	def joinRoom(name)
