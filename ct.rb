@@ -266,7 +266,7 @@ class Pm
 		@socket = TCPSocket.new @server, 443 #5222
 		auth
 		@connected = true
-		setInterval(20, :ping, "Ping! at <PM>")
+		@mgr.setInterval(self, 20, :ping, "Ping! at <PM>")
 	end
 
 	def message user, msg
@@ -424,16 +424,6 @@ class Pm
 		end
 	end
 
-	def setInterval timeout, evt, *args
-		task = Task_.new(self, timeout, true, evt, *args)
-		@mgr.add_task task
-	end
-
-	def setTimeout timeout, evt, *args
-		task = Task_.new(self, timeout, false, evt, *args)
-		@mgr.add_task task
-	end
-
 	def callEvent evt, *args
 		if @mgr.respond_to?(evt)
 			@mgr.send(evt, *args)
@@ -529,7 +519,14 @@ class Room
 		auth
 		@connected = true
 		@status.clear
-		setInterval(20, :ping, "Ping! at #{@name}")
+		@mgr.setInterval(self, 20, :ping, "Ping! at #{@name}")
+	end
+
+	def reconnect
+		if @connected
+			@mgr.leaveRoom @name
+		end
+		@mgr.joinRoom @name
 	end
 
 	def message msg, html = false
@@ -959,16 +956,6 @@ class Room
 		callEvent(:onFloodBanRepeat, self)
 	end
 
-	def setInterval timeout, evt, *args
-		task = Task_.new(self, timeout, true, evt, *args)
-		@mgr.add_task task
-	end
-
-	def setTimeout timeout, evt, *args
-		task = Task_.new(self, timeout, false, evt, *args)
-		@mgr.add_task task
-	end
-
 	def addHistory msg
 		@history << msg
 		lastmsg = @history[0]
@@ -1074,12 +1061,15 @@ class Chatango
 	end
 
 	def add_task newtask
-		@tasks << newtask
+		if not @tasks.include?(newtask)
+			@tasks << newtask
+		end
 	end
 
 	def del_task task
 		if @tasks.include?(task)
 			@tasks.delete task
+			task = nil
 		end
 	end
 
@@ -1213,13 +1203,22 @@ class Chatango
 							new = task.timeout + now
 							task.newtarget
 						else
-							@tasks.delete(task)
-							task = nil
+							del_task task
 						end
 					end
 				end
 			end
 		end
+	end
+
+	def setInterval mgr, timeout, evt, *args
+		task = Task_.new(mgr, timeout, true, evt, *args)
+		add_task task
+	end
+
+	def setTimeout mgr, timeout, evt, *args
+		task = Task_.new(mgr, timeout, false, evt, *args)
+		add_task task
 	end
 
 	def finish
