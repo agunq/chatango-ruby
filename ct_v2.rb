@@ -342,7 +342,7 @@ class Pm
 		@socket.connect "ws://#{@server}:8080", options = {:headers => headers}
 		auth
 		@connected = true
-		setInterval(20, :ping, "Ping! at <PM>")
+		@mgr.setInterval(self, 20, :ping, "Ping! at <PM>")
 	end
 
 	def message user, msg
@@ -479,16 +479,6 @@ class Pm
 		end
 	end
 
-	def setInterval timeout, evt, *args
-		task = Task_.new(self, timeout, true, evt, *args)
-		@mgr.add_task task
-	end
-
-	def setTimeout timeout, evt, *args
-		task = Task_.new(self, timeout, false, evt, *args)
-		@mgr.add_task task
-	end
-
 	def callEvent evt, *args
 		if @mgr.respond_to?(evt)
 			@mgr.send(evt, *args)
@@ -584,7 +574,14 @@ class Room
 		auth
 		@connected = true
 		@status.clear
-		setInterval(20, :ping, "Ping! at #{@name}")
+		@mgr.setInterval(self, 20, :ping, "Ping! at #{@name}")
+	end
+
+	def reconnect
+		if @connected
+			@mgr.leaveRoom @name
+		end
+		@mgr.joinRoom @name
 	end
 
 	def message msg, html = false
@@ -722,7 +719,7 @@ class Room
 			end
 		end
 	end
-	
+
 	def process(data)
 		if data
 			data = data.split("\x00")
@@ -940,7 +937,7 @@ class Room
 			callEvent("onBanlistUpdate", self)
 		end
 	end
-	
+
 	def rcmd_unblocklist args
 		data = args[1, args.size-1]
 		@unbanlist = {}
@@ -992,16 +989,6 @@ class Room
 
 	def rcmd_tb(args)
 		callEvent(:onFloodBanRepeat, self)
-	end
-
-	def setInterval timeout, evt, *args
-		task = Task_.new(self, timeout, true, evt, *args)
-		@mgr.add_task task
-	end
-
-	def setTimeout timeout, evt, *args
-		task = Task_.new(self, timeout, false, evt, *args)
-		@mgr.add_task task
 	end
 
 	def addHistory msg
@@ -1069,7 +1056,7 @@ class Room
 end
 
 class Chatango
-	
+
 	def initialize
 		@rooms = {}
 		@user = nil
@@ -1079,7 +1066,7 @@ class Chatango
 		@running = false
 		@pm = nil
 	end
-	
+
 	def pm
 		return @pm
 	end
@@ -1103,18 +1090,21 @@ class Chatango
 	def username
 		return @username
 	end
-	
+
 	def password
 		return @password
 	end
-	
+
 	def add_task newtask
-		@tasks << newtask
+		if not @tasks.include?(newtask)
+			@tasks << newtask
+		end
 	end
-	
+
 	def del_task task
 		if @tasks.include?(task)
 			@tasks.delete task
+			task = nil
 		end
 	end
 
@@ -1243,13 +1233,22 @@ class Chatango
 							new = task.timeout + now
 							task.newtarget
 						else
-							@tasks.delete(task)
-							task = nil
+							del_task task
 						end
 					end
 				end
 			end
 		end
+	end
+
+	def setInterval mgr, timeout, evt, *args
+		task = Task_.new(mgr, timeout, true, evt, *args)
+		add_task task
+	end
+
+	def setTimeout mgr, timeout, evt, *args
+		task = Task_.new(mgr, timeout, false, evt, *args)
+		add_task task
 	end
 
 	def finish
@@ -1262,7 +1261,7 @@ class Chatango
 		end
 		@running = false
 	end
-	
+
 	def getRoom(name)
 		if @rooms.key?(name) == true
 			return @rooms[name]
