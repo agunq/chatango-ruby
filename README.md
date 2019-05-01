@@ -1,9 +1,7 @@
 # ct.rb
-this module is suck xaxaxaa xP 
-better use python
+if you love chatango flash version use ct.rb
 
-i'm making it just for fun
-# Require Ruby 2.0
+# Require Ruby 2.0 or latest version
 Try it!
 
     ruby example.rb
