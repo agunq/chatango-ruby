@@ -163,7 +163,7 @@ def parseFont(f)
 		sizecolor, fontface = f.split("=", 1)
 		sizecolor = sizecolor.strip()
 		size = sizecolor[1,3].to_i
-		col = sizecolor[3,3]
+		col = sizecolor[3,6]
 		if col == ""
 			col = nil
 		end
@@ -518,7 +518,7 @@ end
 
 class Room
 
-	attr_accessor :wbyte, :owner, :mods, :banlist, :unbanlist
+	attr_accessor :wbyte, :owner, :mods, :banlist, :unbanlist, :bannedwords
 
 	def initialize(mgr, name)
 		@name = name
@@ -539,6 +539,7 @@ class Room
 		@log_i = []
 		@banlist = {}
 		@unbanlist = {}
+		@bannedwords = []
 	end
 
 	def name
@@ -629,6 +630,26 @@ class Room
 
 	def logout
 		sendCommand("blogout")
+	end
+
+	def addBadWord(word, type="part")
+		part_words, exact_words = @bannedwords
+		if !part_words.include?(word) and type=="part"
+			part_words << word
+		elsif !exact_words.include?(word) and type=="exact"
+			exact_words << word
+		end
+		sendCommand("setbannedwords", part_words.join(","), exact_words.join(","))
+	end
+
+	def removeBadWord(word, type="part")
+		part_words, exact_words = @bannedwords
+		if part_words.include?(word) and type=="part"
+			part_words.delete(word)
+		elsif exact_words.include?(word) and type=="exact"
+			exact_words.delete(word)
+		end
+		sendCommand("setbannedwords", part_words.join(","), exact_words.join(","))
 	end
 
 	def addMod(user)
@@ -745,6 +766,9 @@ class Room
 			@mgr.user.setNameColor n
 		elsif args[3] == "C" and @mgr.password == nil
 			sendCommand("blogin", @mgr.username)
+		elsif args[3] != "M"
+			callEvent(:onLoginFail, self)
+			disconnect
 		end
 		@owner = User args[1]
 		mods = args[7].split(";").collect{|x| [User(x.split(",")[0]), x.split(",")[1]] }
@@ -754,16 +778,35 @@ class Room
 	end
 
 	def rcmd_inited args
-		sendCommand("g_participants", "start")
 		sendCommand("getpremium", "1")
+		sendCommand("g_participants", "start")
+		sendCommand("getbannedwords")
 		callEvent(:onConnect, self)
 		for msg in @log_i.reverse
 			user = msg.user
-			callEvent("onHistoryMessage", self, user, msg)
+			callEvent(:onHistoryMessage, self, user, msg)
 			addHistory msg
 		end
 		@log_i = []
-		setWriteLock(false)
+	end
+
+	def rcmd_bw(args)
+		if args[1]
+			part_words = URI.unescape(args[1]).split(",")
+		else
+			part_words = []
+		end
+		if args[2]
+			exact_words = URI.unescape(args[2]).split(",")
+		else
+			exact_words = []
+		end
+		@bannedwords = [part_words, exact_words]
+		callEvent(:onBannedWordsUpdated, self, @bannedwords)
+	end
+
+	def rcmd_ubw(args)
+		sendCommand("getbannedwords")
 	end
 
 	def rcmd_g_participants args
@@ -818,26 +861,29 @@ class Room
 
 	def rcmd_b args
 		name = args[2]
-		msg = args[10, args.length].join(":")
-		msg, n, f = clean_message(msg)
-		if name == ""
-			nameColor = nil
-			name = "#" + args[3]
-			if name == "#"
-				name = "!anon" + getAnonId(n, args[4])
-			end
-		else
-			if n
-				nameColor = n
-			else
+		rawmsg = args[10, args.size-10]
+		if rawmsg
+			msg, n, f = clean_message(rawmsg.join(":"))
+			if name == ""
 				nameColor = nil
+				name = "#" + args[3]
+				if name == "#"
+					name = "!anon" + getAnonId(n, args[4])
+				end
+			else
+				if n
+					nameColor = n
+				else
+					nameColor = nil
+				end
 			end
+			user = User name
+			fontColor, fontFace, fontSize = parseFont(f)
+			mtime = args[1].to_f
+			msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+			msg.attach self, args[6]
+			@mqueue[args[6]]  = msg
 		end
-		user = User name
-		fontColor, fontFace, fontSize = parseFont(f)
-		mtime = args[1].to_f
-		msg = Message.new(self, user, msg, args[5], args[6], args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
-		@mqueue[args[6]]  = msg
 	end
 
 	def rcmd_u args
@@ -862,27 +908,29 @@ class Room
 
 	def rcmd_i args
 		name = args[2]
-		msg = args[10, args.length].join(":")
-		msg, n, f = clean_message(msg)
-		if name == ""
-			nameColor = nil
-			name = "#" + args[3]
-			if name == "#"
-				name = "!anon" + getAnonId(n, args[4])
-			end
-		else
-			if n
-				nameColor = n
-			else
+		rawmsg = args[10, args.size-10]
+		if rawmsg
+			msg, n, f = clean_message(rawmsg.join(":"))
+			if name == ""
 				nameColor = nil
+				name = "#" + args[3]
+				if name == "#"
+					name = "!anon" + getAnonId(n, args[4])
+				end
+			else
+				if n
+					nameColor = n
+				else
+					nameColor = nil
+				end
 			end
+			user = User name
+			fontColor, fontFace, fontSize = parseFont(f)
+			mtime = args[1].to_f
+			msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+			msg.attach self, args[6]
+			@log_i << msg
 		end
-		user = User name
-		fontColor, fontFace, fontSize = parseFont(f)
-		mtime = args[1].to_f
-		msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
-		msg.attach self, args[6]
-		@log_i << msg
 	end
 
 	def rcmd_premium args
@@ -903,7 +951,7 @@ class Room
 		msg = getMessageById args[1]
 		if @history.include? msg
 			@history.delete msg
-			callEvent("onMessageDelete", self, msg.user, msg)
+			callEvent(:onMessageDelete, self, msg.user, msg)
 		end
 	end
 
@@ -915,7 +963,7 @@ class Room
 
 	def rcmd_n args
 		@userCount = args[1].to_i(16)
-		callEvent("onUserCountChange", self)
+		callEvent(:onUserCountChange, self)
 	end
 
 	def rcmd_blocklist args
@@ -934,7 +982,7 @@ class Room
 				"time" => params[3].to_f,
 				"src" => User(params[4])
 			}
-			callEvent("onBanlistUpdate", self)
+			callEvent(:onBanlistUpdate, self)
 		end
 	end
 
@@ -954,7 +1002,7 @@ class Room
 				"time" => params[3].to_f,
 				"src" => User(params[4])
 			}
-			callEvent("onUnbanlistUpdate", self)
+			callEvent(:onUnbanlistUpdate, self)
 		end
 	end
 
@@ -963,7 +1011,7 @@ class Room
 		target = User(args[3])
 		user = User(args[4])
 		@banlist[target] = {"unid" => args[1], "ip" => args[2], "target" => target, "time" => args[5].to_f, "src" => user}
-		callEvent("onBan", self, user, target)
+		callEvent(:onBan, self, user, target)
 	end
 
 	def rcmd_unblocked args
@@ -971,7 +1019,7 @@ class Room
 		target = User(args[3])
 		user = User(args[4])
 		@unbanlist[target] = {"unid" => args[1], "ip" => args[2], "target" => target, "time" => args[5].to_f, "src" => user}
-		callEvent("onUnban", self, user, target)
+		callEvent(:onUnban, self, user, target)
 	end
 
 	def rcmd_updateprofile(args)
@@ -1139,7 +1187,7 @@ class Chatango
 		end
 	end
 
-	def enableRecording
+	def disableRecording
 		self.user.mrec = false
 		for room in rooms
 			room.setRecordingMode(0)
