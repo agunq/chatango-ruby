@@ -264,12 +264,15 @@ class Pm
 	def connect
 		@socket = TCPSocket.new @server, 443 #5222
 		auth
-		@connected = true
 		@mgr.setInterval(self, 20, :ping, "Ping! at <PM>")
+		@connected = true
 	end
 
-	def message user, msg
-		sendCommand("msg", user, msg)
+	def message username, msg
+		if msg != nil
+			msg = "<n#{@mgr.user.nameColor}/><m v=\"1\"><g x#{@mgr.user.fontSize}s#{@mgr.user.fontColor}=\"#{@mgr.user.fontFace}\">#{msg}</g></m>"
+			sendCommand("msg", username, msg)
+		end
 	end
 
 	def disconnect
@@ -315,12 +318,20 @@ class Pm
 		end
 	end
 
+	def setBgMode mode
+		sendCommand("msgbg", mode.to_s)
+	end
+
+	def setRecordingMode mode
+		sendCommand("msgmedia", mode.to_s)
+	end
+
 	def process(data)
 		data = data.split("\x00")
 		for d in data
 			food = d.split(":")
 			if food.length > 0
-				cmd = "rcmd_" + food[0]
+				cmd = "rcmd_" + food[0].rstrip
 				if self.respond_to?(cmd)
 					self.send(cmd, food)
 				end
@@ -332,6 +343,7 @@ class Pm
 		setWriteLock(false)
 		sendCommand("wl")
 		sendCommand("getblock")
+		sendCommand("getpremium", "1")
 		callEvent(:onPMConnect, self)
 	end
 
@@ -370,6 +382,11 @@ class Pm
 		callEvent(:onLoginFail, self)
 	end
 
+	def rcmd_mhs(args)
+		@connected = true
+		setWriteLock(false)
+	end
+
 	def rcmd_msg args
 		user = User args[1]
 		body = strip_html args[6, args.length].join ":"
@@ -382,6 +399,34 @@ class Pm
 		body = strip_html args[6, args.length].join ":"
 		body = body[0, body.length-2]
 		callEvent(:onPMOfflineMessage, self, user, body)
+	end
+
+	def rcmd_wlonline(args)
+		user = User(args[1])
+		last_on = args[2].to_f
+		@status[user] = [last_on,true,last_on]
+		callEvent(:onPMContactOnline, user)
+	end
+
+	def rcmd_wloffline(args)
+		user = User(args[1])
+		last_on = args[2].to_f
+		@status[user] = [last_on,false,0]
+		callEvent(:onPMContactOffline, user)
+	end
+
+	def rcmd_premium args
+		if args[2].to_i > Time.now.to_i
+			@premium = true
+			if @mgr.user.mbg
+				self.setBgMode(1)
+			end
+			if @mgr.user.mrec
+				self.setRecordingMode(1)
+			end
+		else
+			@premium = false
+		end
 	end
 
 	def rcmd_kickingoff(args)
@@ -439,7 +484,7 @@ end
 
 class Room
 
-	attr_accessor :wbyte, :owner, :mods, :banlist, :unbanlist, :bannedwords
+	attr_accessor :wbyte, :owner, :mods, :banlist, :unbanlist, :bannedwords, :usercount, :channel
 
 	def initialize(mgr, name)
 		@name = name
@@ -461,6 +506,8 @@ class Room
 		@banlist = {}
 		@unbanlist = {}
 		@bannedwords = []
+		@usercount = 0
+		@channel = "0"
 	end
 
 	def name
@@ -493,9 +540,9 @@ class Room
 	def connect
 		@socket = TCPSocket.new @server, 443
 		auth
-		@connected = true
 		@status.clear
 		@mgr.setInterval(self, 20, :ping, "Ping! at #{@name}")
+		@connected = true
 	end
 
 	def reconnect
@@ -505,7 +552,7 @@ class Room
 		@mgr.joinRoom @name
 	end
 
-	def message msg, html = false
+	def message msg, html = false, msgc = @channel
 		if html == false
 			msg = msg.gsub( "<", "&lt;")
 			msg = msg.gsub( ">", "&gt;")
@@ -514,7 +561,7 @@ class Room
 		s, c, f = @mgr.user.fontSize, @mgr.user.fontColor, @mgr.user.fontFace
 		for msg in msgs
 			msg = "<n#{@mgr.user.nameColor}/><f x#{s}#{c}=\"#{f}\">#{msg}</f>"
-			sendCommand("bmsg", "t12r", msg)
+			sendCommand("bm", "t12r", msgc, msg)
 		end
 	end
 
@@ -666,12 +713,17 @@ class Room
 		for d in data
 			food = d.split(":")
 			if food.length > 0
-				cmd = "rcmd_" + food[0]
+				cmd = "rcmd_" + food[0].rstrip
 				if self.respond_to?(cmd)
 					self.send(cmd, food)
 				end
 			end
 		end
+	end
+
+	def rcmd_denied(args)
+		disconnect
+		callEvent(:onLoginFail, self)
 	end
 
 	def rcmd_ok args
@@ -817,6 +869,7 @@ class Room
 				end
 				@mqueue[args[1]] = nil
 				addHistory msg
+				@channel = msg.badge
 				callEvent(:onMessage, self, msg.user, msg)
 			else
 				puts "som secret stuff"
@@ -880,7 +933,7 @@ class Room
 	end
 
 	def rcmd_n args
-		@userCount = args[1].to_i(16)
+		@usercount = args[1].to_i(16)
 		callEvent(:onUserCountChange, self)
 	end
 
@@ -900,8 +953,8 @@ class Room
 				"time" => params[3].to_f,
 				"src" => User(params[4])
 			}
-			callEvent(:onBanlistUpdate, self)
 		end
+		callEvent(:onBanlistUpdate, self)
 	end
 	def rcmd_unblocklist args
 		data = args[1, args.size-1]
@@ -919,8 +972,8 @@ class Room
 				"time" => params[3].to_f,
 				"src" => User(params[4])
 			}
-			callEvent(:onUnbanlistUpdate, self)
 		end
+		callEvent(:onUnbanlistUpdate, self)
 	end
 
 	def rcmd_blocked args
