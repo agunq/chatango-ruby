@@ -7,6 +7,7 @@
 
 require 'socket'
 require 'uri'
+require 'cgi'
 require 'net/http'
 require 'websocket'
 
@@ -844,12 +845,12 @@ class Room
 
 	def rcmd_bw(args)
 		if args[1]
-			part_words = URI.unescape(args[1]).split(",")
+			part_words = CGI.unescape(args[1]).split(",")
 		else
 			part_words = []
 		end
 		if args[2]
-			exact_words = URI.unescape(args[2]).split(",")
+			exact_words = CGI.unescape(args[2]).split(",")
 		else
 			exact_words = []
 		end
