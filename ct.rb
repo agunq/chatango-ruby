@@ -829,7 +829,14 @@ class Room
 			callEvent(:onJoin, self, user)
 		end
 	end
-
+	
+	def rcmd_mods args
+		mods = args[1..-1].collect{|x| [User(x.split(",")[0]), x.split(",")[1]] }
+		for mod, v in mods
+			@mods[mod] = v
+		end
+	end
+	
 	def rcmd_b args
 		name = args[2]
 		rawmsg = args[10, args.size-10]
