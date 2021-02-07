@@ -212,7 +212,7 @@ end
 
 class Pm
 
-	attr_accessor :wbyte, :blocklist, :contacts
+	attr_accessor :wbyte, :blocklist, :contacts, :status
 
 	def initialize(mgr)
 		@auid = nil
@@ -349,7 +349,6 @@ class Pm
 	end
 
 	def rcmd_wl args
-		@contacts = []
 		data = args[1, args.size-1]
 		for i in (0..(data.size/4)-1)
 			name, last_on, is_on, idle = data[i * 4, i * 4 + 4]
