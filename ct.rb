@@ -791,6 +791,8 @@ class Room
 				n = data[1].to_i.to_s[-4, 4]
 				if data[4] == "None"
 					name = "!anon" + getAnonId(n, puid)
+				else
+					name = "#" + data[4]
 				end
 			end
 			user = User name
@@ -808,6 +810,8 @@ class Room
 			n = args[6].to_i.to_s[-4, 4]
 			if args[4] == "None"
 				name = "!anon" + getAnonId(n, puid)
+			else
+				name = "#" + args[4]
 			end
 		end
 
