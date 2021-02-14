@@ -137,11 +137,12 @@ end
 
 class User_
 
-	attr_accessor :name, :puid, :nameColor, :fontSize, :fontFace, :fontColor, :mbg, :mrec
+	attr_accessor :name, :puid, :sid, :nameColor, :fontSize, :fontFace, :fontColor, :mbg, :mrec
 
 	def initialize(name)
 		@name = name
 		@puid = nil
+		@sid = nil
 		@nameColor = "000"
 		@fontSize = 12
 		@fontFace = "0"
@@ -797,6 +798,7 @@ class Room
 			end
 			user = User name
 			user.puid = puid
+			user.sid = sid
 			@status[sid] = user
 		end
 	end
@@ -817,6 +819,7 @@ class Room
 
 		user = User name
 		user.puid = puid
+		user.sid = sid
 
 		#leave
 		if args[0] == "0"
@@ -861,7 +864,7 @@ class Room
 			user = User name
 			fontColor, fontFace, fontSize = parseFont(f)
 			mtime = args[1].to_f
-			msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+			msg = Message.new(self, user, msg, args[5], args[4], args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
 			msg.attach self, args[6]
 			@mqueue[args[6]]  = msg
 		end
@@ -909,7 +912,7 @@ class Room
 			user = User name
 			fontColor, fontFace, fontSize = parseFont(f)
 			mtime = args[1].to_f
-			msg = Message.new(self, user, msg, args[5], "", args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
+			msg = Message.new(self, user, msg, args[5], args[4], args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
 			msg.attach self, args[6]
 			@log_i << msg
 		end
@@ -1297,14 +1300,17 @@ class Chatango
 	end
 
 	def getRoom(name)
+		name = name.downcase
 		if @rooms.key?(name) == true
 			return @rooms[name]
 		end
 	end
 
 	def joinRoom(name)
+		rawname = name
+		name = name.downcase
 		if @rooms.key?(name) == false
-			@rooms[name] = Room.new(self, name)
+			@rooms[name] = Room.new(self, rawname)
 			@rooms[name].connect
 		elsif @rooms.key?(name) == true
 			if @rooms[name].connected == false
@@ -1314,6 +1320,7 @@ class Chatango
 	end
 
 	def leaveRoom(name)
+		name = name.downcase
 		if @rooms.key?(name) == true
 			@rooms[name].disconnect
 			@rooms.delete(name)
