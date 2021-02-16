@@ -163,8 +163,8 @@ def parseFont(f)
 	if f != nil
 		sizecolor, fontface = f.split("=", 1)
 		sizecolor = sizecolor.strip()
-		size = sizecolor[1,3].to_i
-		col = sizecolor[3,6]
+		size = sizecolor[1,2].to_i
+		col = sizecolor[3,3]
 		if col == ""
 			col = nil
 		end
@@ -209,6 +209,15 @@ def User(name)
 		user = $users[name.downcase]
 	end
 	return user
+end
+
+def RemoveUser(name)
+    if name == nil
+		name = ""
+	end
+    if $users.include?(name.downcase)
+        $users.delete(name.downcase)
+    end
 end
 
 class User_
@@ -669,9 +678,14 @@ class Room
 	end
 
 	def login(name, pass=nil)
-		if pass != nil
+		if pass != nil 
+			@mgr.user = User(name)       
+			@mgr.username = name
 			sendCommand("blogin", name.to_s, pass.to_s)
 		else
+			rname = "#" + name  
+			@mgr.user = User(rname)
+			@mgr.username = rname
 			sendCommand("blogin", name.to_s)
 		end
 	end
@@ -813,12 +827,16 @@ class Room
 		setWriteLock(false)
 		if args[3] == "C" and @mgr.username == nil and @mgr.password == nil
 			n = args[5].split('.')[0]
-			n = n[-4, n.length]
+			n = n[-4, n.length-4]
 			aid = args[2][0, 8]
 			pid = "!anon" + getAnonId(n, aid)
+			RemoveUser(@mgr.username)
+            user = User(pid)
+			@mgr.user = user
 			@mgr.user.setNameColor n
+			@mgr.username = pid
 		elsif args[3] == "C" and @mgr.password == nil
-			sendCommand("blogin", @mgr.username)
+			login(@mgr.username)
 		elsif args[3] != "M"
 			callEvent(:onLoginFail, self)
 			disconnect
@@ -968,7 +986,7 @@ class Room
 				@channel = msg.badge
 				callEvent(:onMessage, self, msg.user, msg)
 			else
-				puts "som secret stuff"
+				puts "#{@name} som secret stuff"
 			end
 		end
 	end
@@ -1171,10 +1189,12 @@ class Room
 end
 
 class Chatango
+    
+	attr_accessor :user, :username, :password, :tasks, :running, :pm
 
 	def initialize
 		@rooms = {}
-		@user = nil
+		@user = User(username)
 		@username = nil
 		@password = nil
 		@tasks = []
@@ -1184,11 +1204,6 @@ class Chatango
 
 	def pm
 		return @pm
-	end
-
-	def user
-		@user = User username
-		return @user
 	end
 
 	def rooms
