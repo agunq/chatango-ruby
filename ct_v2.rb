@@ -678,6 +678,7 @@ class Room
 	end
 
 	def login(name, pass=nil)
+		RemoveUser(name)
 		if pass != nil 
 			@mgr.user = User(name)       
 			@mgr.username = name
