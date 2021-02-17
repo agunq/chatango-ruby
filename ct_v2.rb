@@ -161,9 +161,9 @@ end
 
 def parseFont(f)
 	if f != nil
-		sizecolor, fontface = f.split("=", 1)
+		sizecolor, fontface = f.split("=", 2)
 		sizecolor = sizecolor.strip()
-		size = sizecolor[1,3].to_i
+		size = sizecolor[1,2].to_i
 		col = sizecolor[3,6]
 		if col == ""
 			col = nil
