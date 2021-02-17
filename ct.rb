@@ -134,14 +134,6 @@ def User(name)
 	return user
 end
 
-def RemoveUser(name)
-    if name == nil
-		name = ""
-	end
-    if $users.include?(name.downcase)
-        $users.delete(name.downcase)
-    end
-end
 
 class User_
 
@@ -534,6 +526,7 @@ class Room
 	def auth
 		if @mgr.username !=nil and @mgr.password !=nil
 			sendCommand("bauth", @name, @uid, @mgr.username, @mgr.password)
+			# login as anon
 		else
 			sendCommand("bauth", @name, @uid)
 		end
@@ -596,15 +589,9 @@ class Room
 	end
 
 	def login(name, pass=nil)
-		RemoveUser(name)
-		if pass != nil 
-			@mgr.user = User(name)       
-			@mgr.username = name
+		if pass != nil
 			sendCommand("blogin", name.to_s, pass.to_s)
 		else
-			rname = "#" + name  
-			@mgr.user = User(rname)
-			@mgr.username = rname
 			sendCommand("blogin", name.to_s)
 		end
 	end
@@ -744,16 +731,12 @@ class Room
 		setWriteLock(false)
 		if args[3] == "C" and @mgr.username == nil and @mgr.password == nil
 			n = args[5].split('.')[0]
-			n = n[-4, n.length-4]
+			n = n[-4, n.length]
 			aid = args[2][0, 8]
 			pid = "!anon" + getAnonId(n, aid)
-			RemoveUser(@mgr.username)
-            user = User(pid)
-			@mgr.user = user
 			@mgr.user.setNameColor n
-			@mgr.username = pid
 		elsif args[3] == "C" and @mgr.password == nil
-			login(@mgr.username)
+			sendCommand("blogin", @mgr.username)
 		elsif args[3] != "M"
 			callEvent(:onLoginFail, self)
 			disconnect
@@ -903,7 +886,7 @@ class Room
 				@channel = msg.badge
 				callEvent(:onMessage, self, msg.user, msg)
 			else
-				puts "#{@name} som secret stuff"
+				puts "som secret stuff"
 			end
 		end
 	end
@@ -1105,12 +1088,10 @@ class Room
 end
 
 class Chatango
-    
-	attr_accessor :user, :username, :password, :tasks, :running, :pm
 
 	def initialize
 		@rooms = {}
-		@user = User(username)
+		@user = nil
 		@username = nil
 		@password = nil
 		@tasks = []
@@ -1120,6 +1101,11 @@ class Chatango
 
 	def pm
 		return @pm
+	end
+
+	def user
+		@user = User username
+		return @user
 	end
 
 	def rooms
