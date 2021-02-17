@@ -90,7 +90,7 @@ def parseFont(f)
 		if col == ""
 			col = nil
 		end
-		face = f.split("\"", 2)[1].split("\"", 2)[0]
+		face = f.split("\"", 3)[1]
 		return col, face, size
 	else
 		return nil, nil, nil
