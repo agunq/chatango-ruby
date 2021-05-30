@@ -902,16 +902,15 @@ class Room
 				msg.user.fontSize = msg.fontSize
 				msg.user.nameColor = msg.nameColor
 			end
-			addHistory msg
-			@channel = msg.badge
-			callEvent(:onMessage, self, msg.user, msg)
+			
 			@mqueue[args[6]]  = msg
-			if @umqueue
-				if @umqueue.keys.include?(args[6])
-					umsgid = @umqueue[args[6]]
-					msg.attach(self, umsgid)
-					@umqueue.delete args[6]
-				end
+			if @umqueue.keys.include?(args[6])
+				umsgid = @umqueue[args[6]]
+				msg.attach(self, umsgid)
+				@umqueue.delete args[6]
+				addHistory msg
+				@channel = msg.badge
+				callEvent(:onMessage, self, msg.user, msg)
 			end
 			checkSecret args[6]
 		end
@@ -919,25 +918,25 @@ class Room
 
 	def rcmd_u args
 		@umqueue[args[1]]  = args[2]
-		if @mqueue
-			if @mqueue.keys.include?(args[1])
-				msg = @mqueue[args[1]]
-				msg.attach(self, args[2])
-				@mqueue.delete args[1]
-			end
+		if @mqueue.keys.include?(args[1])
+			msg = @mqueue[args[1]]
+			msg.attach(self, args[2])
+			@mqueue.delete args[1]
+			addHistory msg
+			@channel = msg.badge
+			callEvent(:onMessage, self, msg.user, msg)
+			
 		end
 		checkSecret args[1]
 	end
 	
 	def checkSecret check
-		
 		@umqueue.each{|k, v|
 			if k != check 
 				@umqueue.delete(k)
 				@umqueue.each{|ks, vs| puts "some secret #{ks} #{vs} #{self.name}"}
 			end
 		}
-		
 	end
 
 	def rcmd_i args
