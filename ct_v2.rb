@@ -577,6 +577,7 @@ class Room
 		@wlock = false
 		@firstCommand = true
 		@mqueue = {}
+		@umqueue = {}
 		@socket = WebSocketC.new
 		@status = {}
 		@owner = ""
@@ -919,12 +920,41 @@ class Room
 	end
 
 	def rcmd_mods args
-		mods = args[1..-1].collect{|x| [User(x.split(",")[0]), x.split(",")[1]] }
-		for mod, v in mods
+		new = args[1..-1].collect{|x| [User(x.split(",")[0]), x.split(",")[1]] }
+		old = @mods
+		
+		@mods = {}
+		newmods = []
+		upmods = []
+		delmods = []
+		for mod, v in new
 			@mods[mod] = v
+			if old.include? mod
+				if old[mod] != v
+					upmods << [mod, v, old[mod]]
+				end
+			else
+				newmods <<  [mod, v]
+			end
 		end
+		
+		for mod, v in old
+			if !new.collect{|k,v|k }.include? mod
+				delmods << [mod, v]
+			end
+		end
+		if newmods.size > 0
+			callEvent(:onModAdd, newmods)
+		end
+		if upmods.size > 0
+			callEvent(:onModChange, upmods)
+		end
+		if delmods.size > 0
+			callEvent(:onModRemove, delmods)
+		end
+		
 	end
-
+	
 	def rcmd_b args
 		name = args[2]
 		rawmsg = args[10, args.size-10]
@@ -947,30 +977,51 @@ class Room
 			fontColor, fontFace, fontSize = parseFont(f)
 			mtime = args[1].to_f
 			msg = Message.new(self, user, msg, args[5], args[4], args[7], args[8], mtime, nameColor, fontColor, fontFace, fontSize)
-			msg.attach self, args[6]
+		
+			if msg.user != @mgr.user
+				msg.user.fontColor = msg.fontColor
+				msg.user.fontFace = msg.fontFace
+				msg.user.fontSize = msg.fontSize
+				msg.user.nameColor = msg.nameColor
+			end
+			addHistory msg
+			@channel = msg.badge
+			callEvent(:onMessage, self, msg.user, msg)
 			@mqueue[args[6]]  = msg
+			if @umqueue
+				if @umqueue.keys.include?(args[6])
+					umsgid = @umqueue[args[6]]
+					msg.attach(self, umsgid)
+					@umqueue.delete args[6]
+				end
+			end
+			checkSecret args[6]
 		end
 	end
+			
+
 
 	def rcmd_u args
+		@umqueue[args[1]]  = args[2]
 		if @mqueue
 			if @mqueue.keys.include?(args[1])
 				msg = @mqueue[args[1]]
 				msg.attach(self, args[2])
-				if msg.user != @mgr.user
-					msg.user.fontColor = msg.fontColor
-					msg.user.fontFace = msg.fontFace
-					msg.user.fontSize = msg.fontSize
-					msg.user.nameColor = msg.nameColor
-				end
-				@mqueue[args[1]] = nil
-				addHistory msg
-				@channel = msg.badge
-				callEvent(:onMessage, self, msg.user, msg)
-			else
-				puts "som secret stuff"
+				@mqueue.delete args[1]
 			end
 		end
+		checkSecret args[1]
+	end
+	
+	def checkSecret check
+		
+		@umqueue.each{|k, v|
+			if k != check 
+				@umqueue.delete(k)
+				@umqueue.each{|ks, vs| puts "some secret #{ks} #{vs} #{self.name}"}
+			end
+		}
+		
 	end
 
 	def rcmd_i args
