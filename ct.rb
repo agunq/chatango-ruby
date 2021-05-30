@@ -83,14 +83,14 @@ end
 
 def parseFont(f)
 	if f != nil
-		sizecolor, fontface = f.split("=", 1)
+		sizecolor, fontface = f.split("=", 2)
 		sizecolor = sizecolor.strip()
-		size = sizecolor[1,3].to_i
+		size = sizecolor[1,2].to_i
 		col = sizecolor[3,6]
 		if col == ""
 			col = nil
 		end
-		face = f.split("\"", 2)[1].split("\"", 2)[0]
+		face = f.split("\"", 3)[1]
 		return col, face, size
 	else
 		return nil, nil, nil
