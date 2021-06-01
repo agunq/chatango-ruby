@@ -350,9 +350,9 @@ class Pm
 	end
 
 	def rcmd_wl args
-		data = args[1, args.size-1]
+		data = args[1..-1]
 		for i in (0..(data.size/4)-1)
-			name, last_on, is_on, idle = data[i * 4, i * 4 + 4]
+			name, last_on, is_on, idle = data[i * 4 .. i * 4 + 4]
 			user = User(name)
 			if last_on == "None"
 				nil
@@ -369,8 +369,10 @@ class Pm
 	end
 
 	def rcmd_block_list(args)
+		data = args[1..-1]
 		@blocklist = []
-		for name in args
+		for name in data
+			name = name.rstrip
 			if name != ""
 				user = User name
 				@blocklist << user
@@ -390,15 +392,15 @@ class Pm
 
 	def rcmd_msg args
 		user = User args[1]
-		body = strip_html args[6, args.length].join ":"
-		body = body[0, body.length-2]
+		body = strip_html args[6..-1].join ":"
+		body = body.rstrip
 		callEvent(:onPMMessage, self, user, body)
 	end
 
 	def rcmd_msgoff(args)
 		user = User(args[1])
-		body = strip_html args[6, args.length].join ":"
-		body = body[0, body.length-2]
+		body = strip_html args[6..-1].join ":"
+		body = body.rstrip
 		callEvent(:onPMOfflineMessage, self, user, body)
 	end
 
@@ -732,8 +734,9 @@ class Room
 		setWriteLock(false)
 		if args[3] == "C" and @mgr.username == nil and @mgr.password == nil
 			n = args[5].split('.')[0]
-			n = n[-4, n.length]
-			aid = args[2][0, 8]
+			n = n[-4..-1]
+			puts n
+			aid = args[2][0..8]
 			pid = "!anon" + getAnonId(n, aid)
 			@mgr.user.setNameColor n
 		elsif args[3] == "C" and @mgr.password == nil
@@ -782,7 +785,7 @@ class Room
 	end
 
 	def rcmd_g_participants args
-		args = args[1, args.length - 1].join(":")
+		args = args[1..-1].join(":")
 		args = args.split(";")
 		for data in args
 			data = data.split(":")
@@ -805,7 +808,7 @@ class Room
 	end
 
 	def rcmd_participant args
-		args = args[1, args.length - 1]
+		args = args[1..-1]
 		sid = args[1]
 		puid = args[2]
 		name = args[3]
@@ -874,8 +877,9 @@ class Room
 	end
 	
 	def rcmd_b args
+		
 		name = args[2]
-		rawmsg = args[10, args.size-10]
+		rawmsg = args[10..-1]
 		if rawmsg
 			msg, n, f = clean_message(rawmsg.join(":"))
 			if name == ""
@@ -941,7 +945,7 @@ class Room
 
 	def rcmd_i args
 		name = args[2]
-		rawmsg = args[10, args.size-10]
+		rawmsg = args[10..-1]
 		if rawmsg
 			msg, n, f = clean_message(rawmsg.join(":"))
 			if name == ""
@@ -1000,7 +1004,7 @@ class Room
 	end
 
 	def rcmd_blocklist args
-		data = args[1, args.size-1]
+		data = args[1..-1]
 		@banlist = {}
 		sections = data.join(":").split(";")
 		for section in sections
@@ -1019,7 +1023,7 @@ class Room
 		callEvent(:onBanlistUpdate, self)
 	end
 	def rcmd_unblocklist args
-		data = args[1, args.size-1]
+		data = args[1..-1]
 		@unbanlist = {}
 		sections = data.join(":").split(";")
 		for section in sections
